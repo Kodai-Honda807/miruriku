@@ -1,0 +1,304 @@
+// みる陸 データモデル
+//
+// 設計方針（詳細は docs/design.md）
+// - 大会シリーズ（EventSeries）と年度・開催回ごとの大会（Event）を分ける
+// - 大会 1 : 放送・配信枠 N（BroadcastSlot）
+// - 日付のみ判明している状態は @db.Date（開催地の現地日付）で表し、
+//   確定した瞬間は timestamptz（UTC）で保存して表示時に変換する
+// - 大会全体の放送情報状態（Event.broadcastInfoStatus）と、
+//   各放送枠の検証状態（BroadcastSlot.verificationStatus）・公開状態（status）を分ける
+// - 機械的な取得日時（Source.lastFetchedAt / CollectionRun）と
+//   人が確認した日時（Event.broadcastCheckedAt / BroadcastSlot.verifiedAt）を分ける
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// 競技カテゴリ
+enum Category {
+  EKIDEN // 駅伝
+  MARATHON // マラソン
+  TRACK // トラック（陸上競技）
+}
+
+/// 公開状態（大会・放送枠で共通）
+enum PublicationStatus {
+  DRAFT // 下書き（公開ページに出さない）
+  PUBLISHED // 公開
+}
+
+/// 大会全体の放送・配信情報の状態
+enum BroadcastInfoStatus {
+  CONFIRMED // 公式発表を確認済み
+  NOT_ANNOUNCED // 未発表であることを確認済み
+  UNVERIFIED // 調査したが確認できていない（初期値）
+  NO_BROADCAST // 公式に放送・配信なしと案内されている
+  PAST_REFERENCE // 今年の情報は未確認。過去大会の参考情報のみ
+}
+
+/// 個々の放送・配信枠の検証状態
+enum SlotVerificationStatus {
+  CONFIRMED // 公式情報で確認済み
+  UNVERIFIED // 未確認
+  PAST_REFERENCE // 過去大会の参考情報（今年の確定情報ではない）
+}
+
+/// 媒体
+enum BroadcastMedium {
+  TERRESTRIAL // 地上波
+  BS
+  CS
+  INTERNET // ネット配信
+  RADIO // ラジオ
+}
+
+/// 視聴料金
+enum CostType {
+  FREE
+  PAID
+  UNKNOWN
+}
+
+/// 視聴形態
+enum ViewingType {
+  LIVE // ライブ（生中継・生配信）
+  DELAYED // 録画（ディレイ）放送
+  ON_DEMAND // 見逃し配信
+  UNKNOWN
+}
+
+/// 視聴可能地域
+enum RegionAvailability {
+  NATIONWIDE // 全国
+  REGIONAL // 地域限定（regionNote に詳細）
+  JAPAN_UNKNOWN // 日本からの視聴可否が不明
+  UNKNOWN // 不明
+}
+
+/// 情報源の種類
+enum SourceKind {
+  OFFICIAL_SITE // 大会公式
+  BROADCAST_INFO // 放送・配信の案内ページ
+  OTHER
+}
+
+/// 収集実行の結果
+enum CollectionRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SKIPPED // robots.txt 等により取得しなかった
+}
+
+/// 取得方法
+enum FetchMode {
+  HTTP // 実際に HTTP(S) で取得
+  FIXTURE // リポジトリ内の固定ファイルを読み込み（デモ・テスト用）
+}
+
+/// 抽出プロバイダの種類（画面に正直に表示する）
+enum ExtractionProviderKind {
+  FIXTURE // 固定データ（デモ・テスト用。実収集ではない）
+  RULE_BASED // ルールベース抽出
+  LLM // LLM による抽出
+}
+
+/// 抽出候補のレビュー状態
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// 大会シリーズ（例: ○○駅伝）。年度ごとの開催は Event。
+model EventSeries {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String?
+  officialUrl String?
+  isDemo      Boolean  @default(false)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  events Event[]
+}
+
+/// 年度・開催回ごとの大会
+model Event {
+  id           String            @id @default(cuid())
+  slug         String            @unique
+  seriesId     String
+  series       EventSeries       @relation(fields: [seriesId], references: [id], onDelete: Restrict)
+  name         String
+  editionLabel String? // 「第103回」など
+  seasonYear   Int
+  category     Category
+  status       PublicationStatus @default(DRAFT)
+  isDemo       Boolean           @default(false)
+  description  String?
+
+  venueName   String?
+  venueRegion String? // 都市・地域名
+  countryCode String  @default("JP") // ISO 3166-1 alpha-2
+  timezone    String  @default("Asia/Tokyo") // 開催地の IANA タイムゾーン
+
+  startDate DateTime  @db.Date // 開催地の現地日付（初日）
+  endDate   DateTime  @db.Date // 開催地の現地日付（最終日。単日開催なら startDate と同じ）
+  startAt   DateTime? @db.Timestamptz(3) // 競技開始の瞬間（判明している場合のみ）
+
+  officialUrl String? // 大会公式サイト
+
+  broadcastInfoStatus BroadcastInfoStatus @default(UNVERIFIED)
+  broadcastNote       String? // 放送・配信情報についての補足（公開）
+  broadcastCheckedAt  DateTime?           @db.Timestamptz(3) // 人が放送情報を最後に確認した日時
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  sessions   EventSession[]
+  broadcasts BroadcastSlot[]
+  sources    Source[]
+  candidates ExtractionCandidate[]
+
+  @@index([status, endDate])
+  @@index([seriesId])
+}
+
+/// 競技・セッション（複数日開催や種目別の開始時刻）
+model EventSession {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String
+  date      DateTime  @db.Date // 開催地の現地日付
+  startAt   DateTime? @db.Timestamptz(3) // 開始の瞬間（判明している場合のみ）
+  note      String?
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([eventId, sortOrder])
+}
+
+/// 放送・配信枠。放送・配信の時刻は競技開始時刻と分けて保持する。
+model BroadcastSlot {
+  id      String @id @default(cuid())
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  medium       BroadcastMedium
+  providerName String // 放送局・配信サービス名
+
+  airDate DateTime? @db.Date // 日本時間の放送日（時刻未定でも日付が分かる場合）
+  startAt DateTime? @db.Timestamptz(3) // 放送・配信開始の瞬間
+  endAt   DateTime? @db.Timestamptz(3) // 放送・配信終了の瞬間
+
+  cost        CostType           @default(UNKNOWN)
+  viewingType ViewingType        @default(UNKNOWN)
+  region      RegionAvailability @default(UNKNOWN)
+  regionNote  String? // 地域限定の詳細など
+  note        String? // 任意の補足
+
+  watchUrl String? // 実際に視聴するページ
+  infoUrl  String? // 放送・配信の案内ページ
+
+  verificationStatus SlotVerificationStatus @default(UNVERIFIED)
+  status             PublicationStatus      @default(DRAFT)
+  verifiedAt         DateTime?              @db.Timestamptz(3) // 人が確認した日時
+
+  sourceId String? // 根拠となる情報源
+  source   Source? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  // 承認によって作成された場合の由来。二重作成防止のため一意制約を設ける。
+  originCandidateId String?
+  originCandidate   ExtractionCandidate? @relation(fields: [originCandidateId], references: [id], onDelete: SetNull)
+  originItemKey     String?
+
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([originCandidateId, originItemKey])
+  @@index([eventId, status])
+}
+
+/// 情報源・根拠（大会公式、放送案内など）。収集は collectEnabled の情報源のみ対象。
+model Source {
+  id             String     @id @default(cuid())
+  eventId        String
+  event          Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind           SourceKind
+  url            String
+  title          String?
+  note           String?
+  collectEnabled Boolean    @default(false) // 収集 CLI による取得を許可するか
+  lastFetchedAt  DateTime?  @db.Timestamptz(3) // 機械的に最後に取得を試みた日時
+  createdAt      DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @db.Timestamptz(3)
+
+  runs       CollectionRun[]
+  slots      BroadcastSlot[]
+  candidates ExtractionCandidate[]
+
+  @@unique([eventId, url])
+}
+
+/// 収集実行の履歴（1 実行 = 1 情報源）
+model CollectionRun {
+  id           String                 @id @default(cuid())
+  sourceId     String
+  source       Source                 @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  fetchMode    FetchMode
+  providerId   String
+  providerKind ExtractionProviderKind
+  status       CollectionRunStatus    @default(RUNNING)
+  startedAt    DateTime               @default(now()) @db.Timestamptz(3)
+  finishedAt   DateTime?              @db.Timestamptz(3)
+  httpStatus   Int?
+  finalUrl     String?
+  contentType  String?
+  byteLength   Int?
+  contentHash  String? // 抽出テキストの SHA-256
+  errorCode    String? // 例: ROBOTS_DISALLOWED, BLOCKED_ADDRESS, TIMEOUT, VALIDATION_FAILED
+  errorMessage String? // 管理画面のみで表示する内部向けメッセージ
+
+  candidates ExtractionCandidate[]
+
+  @@index([sourceId, startedAt])
+}
+
+/// 抽出候補。人が承認するまで公開データには反映しない。
+model ExtractionCandidate {
+  id           String                 @id @default(cuid())
+  eventId      String
+  event        Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  sourceId     String?
+  source       Source?                @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  runId        String?
+  run          CollectionRun?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+  fetchMode    FetchMode
+  providerId   String
+  providerKind ExtractionProviderKind
+  contentHash  String?
+
+  payload Json // Zod で検証・正規化済みの抽出結果（src/domain/candidate.ts の NormalizedExtraction）
+  diff    Json // 生成時点の差分スナップショット（src/domain/diff.ts の CandidateDiff）
+
+  reviewStatus ReviewStatus @default(PENDING)
+  reviewedAt   DateTime?    @db.Timestamptz(3)
+  reviewNote   String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  createdSlots BroadcastSlot[]
+
+  @@index([reviewStatus, createdAt])
+  @@index([eventId])
+}

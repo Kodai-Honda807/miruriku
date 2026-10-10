@@ -1,0 +1,175 @@
+# みる陸 CI
+# - シークレット不要（DB は各ジョブの service コンテナ、イメージはビルドのみで push しない）
+# - Node.js は .nvmrc、pnpm は package.json の packageManager に従う
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Prisma CLI の更新確認・テレメトリを無効化
+  CHECKPOINT_DISABLE: "1"
+
+jobs:
+  check:
+    name: Lint / Typecheck / Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # version を指定しないと package.json の packageManager（pnpm@12.10.1）を使う
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+  db-test:
+    name: DB integration tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: miruriku
+          POSTGRES_PASSWORD: miruriku
+          POSTGRES_DB: miruriku_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U miruriku -d miruriku_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # データベース名が _test で終わる場合のみテストが動く（test/db.ts）
+      TEST_DATABASE_URL: postgresql://miruriku:miruriku@localhost:5432/miruriku_test?schema=public
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # マイグレーションの適用は test/db-global-setup.ts が行う
+      - run: pnpm test:db
+
+  build:
+    name: Build (without database)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+      # DATABASE_URL を設定せずにビルドできること（ビルド時に DB へ接続しない）を確認する
+      - name: pnpm build
+        run: |
+          if [ -n "${DATABASE_URL:-}" ]; then echo "DATABASE_URL must not be set during build" >&2; exit 1; fi
+          pnpm build
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.6-alpine
+        env:
+          POSTGRES_USER: miruriku
+          POSTGRES_PASSWORD: miruriku
+          POSTGRES_DB: miruriku_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U miruriku -d miruriku_e2e"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # E2E 開始時に初期化される専用 DB（データベース名が _e2e で終わるもの）
+      E2E_DATABASE_URL: postgresql://miruriku:miruriku@localhost:5432/miruriku_e2e?schema=public
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - name: Upload Playwright report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  docker:
+    name: Docker image (${{ matrix.target }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [runner, migrate, collector]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v4
+      # ビルドのみ（レジストリへの push はしない）
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: ${{ matrix.target }}
+          push: false
+          load: true
+          tags: miruriku-${{ matrix.target }}:ci
+          cache-from: type=gha,scope=${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
+      - name: Image runs as a non-root user
+        run: |
+          uid="$(docker run --rm --entrypoint id miruriku-${{ matrix.target }}:ci -u)"
+          echo "uid=${uid}"
+          test "${uid}" != "0"
+      - name: Image size
+        run: docker image ls miruriku-${{ matrix.target }}:ci

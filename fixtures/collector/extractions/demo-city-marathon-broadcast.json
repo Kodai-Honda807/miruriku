@@ -1,0 +1,42 @@
+{
+  "broadcastStatus": "CONFIRMED",
+  "event": {
+    "startDate": null,
+    "endDate": null,
+    "startTime": null,
+    "venueName": null
+  },
+  "broadcasts": [
+    {
+      "medium": "TERRESTRIAL",
+      "providerName": "みる陸デモ中央テレビ（架空）",
+      "date": "{{EVENT_START_DATE}}",
+      "startTime": "08:50",
+      "endTime": "11:30",
+      "cost": "FREE",
+      "viewingType": "LIVE",
+      "region": "NATIONWIDE",
+      "regionNote": null,
+      "note": null,
+      "watchUrl": null,
+      "infoUrl": "https://example.com/miruriku-demo/city-marathon/broadcast",
+      "evidence": "【地上波】みる陸デモ中央テレビ（架空） {{EVENT_MONTH}}月{{EVENT_DAY}}日（{{EVENT_WEEKDAY}}）8:50〜11:30 生中継・無料・全国放送"
+    },
+    {
+      "medium": "INTERNET",
+      "providerName": "みる陸デモ配信（架空）",
+      "date": "{{EVENT_START_DATE}}",
+      "startTime": "08:50",
+      "endTime": "11:30",
+      "cost": "FREE",
+      "viewingType": "LIVE",
+      "region": "NATIONWIDE",
+      "regionNote": null,
+      "note": null,
+      "watchUrl": "https://example.com/miruriku-demo/watch/city-marathon",
+      "infoUrl": "https://example.com/miruriku-demo/city-marathon/broadcast",
+      "evidence": "【ネット配信】みる陸デモ配信（架空） {{EVENT_MONTH}}月{{EVENT_DAY}}日（{{EVENT_WEEKDAY}}）8:50～11:30 ライブ配信・無料・全国で視聴可 視聴ページ: https://example.com/miruriku-demo/watch/city-marathon"
+    }
+  ],
+  "notes": "固定データ（デモ・テスト用）です。実際のページ取得や AI による抽出の結果ではありません。"
+}

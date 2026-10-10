@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "収集 CLI の固定ファイルモード（--fetch fixture）で使う、情報源 URL と固定ファイルの対応表。デモ・テスト専用で、ネットワークにはアクセスしない。",
+  "entries": [
+    {
+      "sourceUrl": "https://example.com/miruriku-demo/city-marathon/broadcast",
+      "page": "pages/demo-city-marathon-broadcast.html",
+      "contentType": "text/html; charset=utf-8",
+      "extraction": "extractions/demo-city-marathon-broadcast.json",
+      "note": "デモ大会 demo-city-marathon の放送案内（架空）。prisma/demo-seed.ts の DEMO_COLLECT_SOURCE_URL と対応"
+    }
+  ]
+}
