@@ -77,7 +77,25 @@ WSL（Ubuntu）から AWS CLI と SSH だけで、Amazon Lightsail のインス�
 
 ### ドメイン
 
-`deploy/.env` の `DOMAIN` が空なら、`1-2-3-4.sslip.io` のような名前を使います（[sslip.io](https://sslip.io/) は IP アドレスをそのまま名前として解決する公開 DNS です）。独自ドメインを使う場合は、DNS の A レコードを静的 IP に向けてから `DOMAIN` を設定し、`./deploy/deploy.sh` を実行してください。
+`deploy/.env` の `DOMAIN` が空なら、`1-2-3-4.sslip.io` のような名前を使います（[sslip.io](https://sslip.io/) は IP アドレスをそのまま名前として解決する公開 DNS です）。
+
+### 独自ドメイン（例: miruriku.com）を使う
+
+1. Route 53 でドメインを登録し、「ドメイン」→「リクエスト」で登録が完了していること、登録者のメールアドレスを認証済みであることを確認します。
+2. 自動で作られたホストゾーン（`miruriku.com`）に、A レコードを 2 つ作ります。値はどちらも静的 IP（`./deploy/ops.sh status` で確認）、TTL は 300 秒で構いません。
+   - レコード名なし（`miruriku.com`）
+   - `www`（`www.miruriku.com`。任意。作ると `miruriku.com` へ転送します）
+3. 手元で反映を確認します: `getent ahostsv4 miruriku.com`（静的 IP が表示されれば OK）。
+4. `deploy/.env` に `DOMAIN="miruriku.com"` を設定し、`./deploy/deploy.sh` を実行します。
+
+`deploy.sh` は、ドメインが静的 IP に向いていなければ中止します（証明書を取得できないため）。
+`www.<ドメイン>`（DNS が向いている場合）と以前の sslip.io の URL は、パスを保ったまま `https://<ドメイン>` へ 301 転送します。
+canonical・OGP・サイトマップの URL も新しいドメインになります。
+
+切り替えたあとに行うこと:
+
+- Google アナリティクス: 管理 →「データストリーム」でウェブストリームの URL を `https://miruriku.com` に変更する（測定 ID は変わらない）
+- Google Search Console: 「ドメイン」プロパティで `miruriku.com` を追加し、表示された TXT レコードを Route 53 のホストゾーンに追加して所有権を確認する。確認後に `https://miruriku.com/sitemap.xml` を送信する
 
 ## 更新
 
@@ -113,7 +131,7 @@ Lightsail でタグを付けられるリソースの種類は [Lightsail のタ�
 - 出しているもの: ページごとのタイトルと説明文、canonical（絞り込み条件付きの URL は `/` にまとめる）、OGP / X カード、`robots.txt`（`/admin` と `/api/` を除外）、`sitemap.xml`（公開中の実在の大会。デモ大会は除外）、大会詳細の構造化データ（schema.org `SportsEvent`）、トップの `WebSite`、アイコン一式とマニフェスト。
 - デモ（架空）の大会と、存在しないページは `noindex` です。
 - 公開後に行うこと（任意）:
-  1. [Google Search Console](https://search.google.com/search-console) にプロパティを追加し、所有権を確認する（sslip.io では DNS で確認できないため「URL プレフィックス」+「HTML タグ」を使う。確認用のタグはコードに追加が必要）
+  1. [Google Search Console](https://search.google.com/search-console) にプロパティを追加し、所有権を確認する（独自ドメインなら「ドメイン」プロパティ + DNS の TXT レコード。sslip.io では DNS で確認できないため「URL プレフィックス」+「HTML タグ」になり、タグをコードに追加する必要がある）
   2. `https://<DOMAIN>/sitemap.xml` を送信する
   3. [リッチリザルト テスト](https://search.google.com/test/rich-results) で大会詳細ページの構造化データを確認する
 - URL（ドメイン）が変わると、それまでの検索エンジンの評価は引き継がれにくくなります。静的配信への移行などで URL を変える予定があるなら、先に独自ドメインを決めておくのが確実です。

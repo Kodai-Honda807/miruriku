@@ -127,8 +127,35 @@ public_domain() {
   if [[ -n "$DOMAIN" ]]; then
     printf '%s' "$DOMAIN"
   else
-    printf '%s.sslip.io' "${ip//./-}"
+    sslip_domain "$ip"
   fi
+}
+
+# sslip.io の名前（IP をそのまま名前にするワイルドカード DNS）
+sslip_domain() {
+  local ip="$1"
+  printf '%s.sslip.io' "${ip//./-}"
+}
+
+# 名前が指定の IPv4 アドレスに解決されるか（手元の DNS で確認する）
+resolves_to() {
+  local host="$1" ip="$2"
+  getent ahostsv4 "$host" 2>/dev/null | awk '{print $1}' | grep -qxF "$ip"
+}
+
+# 公開ドメインへ 301 転送する名前（Caddy の REDIRECT_DOMAINS）。
+#   - www.<公開ドメイン>（DNS で静的 IP に向いている場合だけ。向いていない名前は証明書を取得できないため）
+#   - 独自ドメインを使う場合は、以前の sslip.io の URL（ブックマークや検索エンジンの評価を引き継ぐため）
+# 必ず 1 つ以上返す（sslip.io の名前は常に静的 IP に解決される）。
+redirect_domains() {
+  local ip="$1" domain="$2" legacy list=()
+  legacy="$(sslip_domain "$ip")"
+  if resolves_to "www.${domain}" "$ip"; then list+=("www.${domain}"); fi
+  if [[ "$domain" != "$legacy" ]]; then list+=("$legacy"); fi
+  # 空にしない（sslip.io の www 付きの名前は常に静的 IP に解決される）
+  if ((${#list[@]} == 0)); then list+=("www.${legacy}"); fi
+  local IFS=,
+  printf '%s' "${list[*]}" | sed 's/,/, /g'
 }
 
 ssh_opts() {

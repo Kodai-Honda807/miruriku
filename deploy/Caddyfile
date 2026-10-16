@@ -21,6 +21,12 @@
 	}
 }
 
+# www 付きの名前と、以前の URL（sslip.io）は公開ドメインへ恒久的に転送する（証明書も自動取得）。
+# パスとクエリは引き継ぐ。値は deploy.sh が DNS を確認して決める（deploy/lib.sh の redirect_domains）
+{$REDIRECT_DOMAINS} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
 # IP アドレスなど、ほかの名前で HTTP アクセスされた場合はドメインの HTTPS へ転送する
 http:// {
 	redir https://{$DOMAIN}{uri} permanent
