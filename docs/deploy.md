@@ -134,6 +134,11 @@ docker compose -p miruriku \
   exec -T db pg_restore -U miruriku -d miruriku --clean --if-exists < /opt/miruriku/backups/<ファイル>.dump
 ```
 
+## うまくいかないとき
+
+- `provision.sh` が「初期設定が完了しません」で止まった: 作成済みのリソースはそのままで構いません。`./deploy/provision.sh` をもう一度実行すると、初回起動時の初期設定（`deploy/cloud-init.sh`）が失敗していれば SSH 経由で実行し直します。それでも失敗する場合は、表示されたログか、サーバーの `~/miruriku-init.log`・`/var/log/cloud-init-output.log` を確認してください。
+- `deploy/cloud-init.sh` を編集するとき: Lightsail はこのスクリプトの前に独自の初期化処理を付け足して `/bin/sh`（dash）で実行するため、1 行目の `#!` は効きません。`set -o pipefail`・`[[ ]]`・配列など bash 専用の書き方は使わないでください（`shellcheck -s sh deploy/cloud-init.sh` で確認できます）。
+
 ## 注意点・未対応のこと
 
 - 認証のない管理画面は公開しません。本番で候補のレビューや編集をしたい場合は、先に管理者の認証・認可を実装する必要があります。

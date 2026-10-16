@@ -119,14 +119,32 @@ if ! $instance_exists && [[ -f "$KNOWN_HOSTS_FILE" ]]; then
 fi
 info "初期設定（Docker の導入など）の完了を待っています。数分かかります"
 ready=false
+rerun_done=false
+last_error=""
 for _ in $(seq 1 60); do
-  if remote "$ip" "test -f ${REMOTE_BASE}/.provisioned && docker compose version >/dev/null" 2>/dev/null; then
+  if last_error="$(remote "$ip" "test -f ${REMOTE_BASE}/.provisioned && docker compose version >/dev/null" 2>&1)"; then
     ready=true
     break
   fi
+  # 初回起動スクリプトが完了の印を残さずに終わっていたら（失敗・途中終了）、SSH 経由で実行し直す
+  if ! $rerun_done; then
+    init_status="$(remote "$ip" "cloud-init status 2>/dev/null | sed -n 's/^status: //p'" 2>/dev/null || true)"
+    if [[ "$init_status" == "done" || "$init_status" == "error" ]]; then
+      warn "初回起動時の初期設定が完了していません（cloud-init: ${init_status}）。SSH 経由で実行し直します（数分かかります）"
+      rerun_done=true
+      if ! remote "$ip" "sudo sh -s > ~/miruriku-init.log 2>&1" <"${DEPLOY_DIR}/cloud-init.sh"; then
+        remote "$ip" "tail -n 30 ~/miruriku-init.log" >&2 || true
+        die "初期設定に失敗しました。上のログ（サーバーの ~/miruriku-init.log）を確認してください"
+      fi
+      continue
+    fi
+  fi
   sleep 10
 done
-$ready || die "初期設定が完了しません。ssh で接続し /var/log/cloud-init-output.log を確認してください（./deploy/ops.sh ssh）"
+if ! $ready; then
+  [[ -n "$last_error" ]] && printf '%s\n' "$last_error" >&2
+  die "初期設定が完了しません。./deploy/ops.sh ssh で接続し、cloud-init status --long と /var/log/cloud-init-output.log を確認してください"
+fi
 
 cat <<DONE
 
