@@ -27,13 +27,13 @@ describe("isAnalyticsEnabled", () => {
 
 describe("GoogleAnalytics", () => {
   it("有効なときは指定の測定 ID で gtag.js を読み込み、初期化する", () => {
-    expect(GA_MEASUREMENT_ID).toBe("G-BS0QJ1TTSS");
+    expect(GA_MEASUREMENT_ID).toBe("G-E17SENSEG0");
     render(<GoogleAnalytics enabled />);
     expect(screen.getByTestId("ga-gtag")).toHaveAttribute(
       "data-src",
-      "https://www.googletagmanager.com/gtag/js?id=G-BS0QJ1TTSS",
+      "https://www.googletagmanager.com/gtag/js?id=G-E17SENSEG0",
     );
-    expect(screen.getByTestId("ga-init").textContent).toContain("gtag('config','G-BS0QJ1TTSS')");
+    expect(screen.getByTestId("ga-init").textContent).toContain("gtag('config','G-E17SENSEG0')");
   });
 
   it("無効なとき（テスト環境の既定）は何も出力しない", () => {

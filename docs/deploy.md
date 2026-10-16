@@ -120,7 +120,7 @@ Lightsail でタグを付けられるリソースの種類は [Lightsail のタ�
 
 ## アクセス解析（Google アナリティクス）
 
-- 測定 ID `G-BS0QJ1TTSS` の GA4 タグ（gtag.js）を、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
+- 測定 ID `G-E17SENSEG0` の GA4 タグ（gtag.js）を、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
 - 手元で本番ビルドを確認するときに計測したくない場合は、ビルド時に `NEXT_PUBLIC_DISABLE_ANALYTICS=1` を指定します。
 - 計測しているときは、フッターに Google アナリティクスの利用と Google のポリシーへのリンクを表示します。
 - フィルタ変更や詳細ページへの移動（画面の再読み込みを伴わない遷移）は、GA4 のデータストリーム設定「拡張計測機能」の「ブラウザの履歴イベントに基づくページの変更」（既定で有効）でページビューになります。
