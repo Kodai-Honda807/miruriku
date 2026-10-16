@@ -56,6 +56,31 @@ describe("EventDetail", () => {
     expect(unverified).toHaveTextContent("確認日時: 記録なし");
   });
 
+  it("一覧で省いた補足・出典・確認日時・大会全体の注記は、詳細ページで表示する", () => {
+    renderDetail({
+      broadcastNote: "スタートは大会要項で「8時30分スタート（予定）」。",
+      broadcasts: [
+        makeBroadcast({
+          note: "関東以外の放送局・放送地域は、お住まいの地域の番組表で確認してください。",
+          source: { url: "https://example.com/program", title: "番組公式ページ（テスト）" },
+          infoUrl: "https://example.com/info",
+        }),
+      ],
+    });
+    const broadcast = section("放送・配信");
+    expect(broadcast).toHaveTextContent("スタートは大会要項で「8時30分スタート（予定）」。");
+    expect(broadcast).toHaveTextContent("情報確認: 2026年10月8日（木）11:30");
+    const slot = within(broadcast).getByTestId("broadcast-slot");
+    expect(slot).toHaveTextContent("関東以外の放送局・放送地域は");
+    expect(within(slot).getByRole("link", { name: /^出典: 番組公式ページ（テスト）/ })).toHaveAttribute(
+      "href",
+      "https://example.com/program",
+    );
+    expect(within(slot).getByRole("link", { name: /放送案内/ })).toHaveAttribute("href", "https://example.com/info");
+    // 詳細では個別のリンクを出すので、枠全体を 1 つのリンクにはしない
+    expect(within(slot).queryByTestId("broadcast-slot-link")).not.toBeInTheDocument();
+  });
+
   it("海外の複数日開催は、日程別に日本時間と現地時刻を表示し、開始時刻不明は「未確認」", () => {
     renderDetail({
       timezone: "Europe/Zurich",
