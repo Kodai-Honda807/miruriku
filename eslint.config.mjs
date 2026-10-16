@@ -5,12 +5,22 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    rules: {
+      // 先頭が _ の変数は「使わないことを明示したもの」として許可する（オブジェクトから項目を除くときなど）
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" },
+      ],
+    },
+  },
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
     // NEXT_DIST_DIR で分けた開発・E2E 用の出力先
     ".next-*/**",
     "out/**",
+    ".e2e/**",
     "build/**",
     "next-env.d.ts",
     // Prisma が生成するクライアント

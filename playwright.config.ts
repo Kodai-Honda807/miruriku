@@ -2,14 +2,13 @@ import "dotenv/config";
 
 import { defineConfig, devices } from "@playwright/test";
 
-import { E2E_FIXED_NOW, E2E_PORT, getE2eDatabaseUrl } from "./e2e/support/env";
+import { E2E_ADMIN_PORT, E2E_FIXED_NOW, E2E_PORT, E2E_STATIC_DIR, getE2eDatabaseUrl } from "./e2e/support/env";
 
 /**
- * E2E テスト。
- * - E2E 専用 DB（E2E_DATABASE_URL、名前が _e2e で終わるもの）を毎回初期化し、
- *   基準日を固定したデモデータと、固定ファイルによる収集候補を用意する（e2e/global-setup.ts）
- * - 管理画面を使うため `next dev`（NODE_ENV=development）で起動し、時計を MIRURIKU_FIXED_NOW で固定する
- * - 公開ページのテスト（public, mobile）が終わってから、データを書き換える管理画面のテスト（admin）を実行する
+ * E2E テスト（pnpm test:e2e = e2e/prepare.ts → playwright test）。
+ * - 公開ページ（public, mobile）: デモデータで静的ビルドした .e2e/out を、本番の CloudFront と同じ URL 処理を
+ *   再現する静的サーバー（scripts/serve-static.mjs）で配信してテストする。時計はビルド時に固定している
+ * - 管理画面（admin）: 開発サーバー（next dev）を E2E 専用 DB に接続し、時計を MIRURIKU_FIXED_NOW で固定する
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -42,23 +41,30 @@ export default defineConfig({
     {
       name: "admin",
       testMatch: /admin\/.*\.spec\.ts/,
-      dependencies: ["public", "mobile"],
-      use: { ...devices["Desktop Chrome"] },
+      use: { ...devices["Desktop Chrome"], baseURL: `http://localhost:${E2E_ADMIN_PORT}` },
     },
   ],
-  webServer: {
-    command: `pnpm exec next dev --port ${E2E_PORT}`,
-    // DB に依存しないヘルスチェックで起動を待つ（DB の初期化は global-setup で行う）
-    url: `http://localhost:${E2E_PORT}/api/health`,
-    // 誤って開発用 DB に接続した既存サーバーを使わないよう、常に新しく起動する
-    reuseExistingServer: false,
-    timeout: 180_000,
-    env: {
-      DATABASE_URL: getE2eDatabaseUrl(),
-      MIRURIKU_ADMIN_ENABLED: "true",
-      MIRURIKU_FIXED_NOW: E2E_FIXED_NOW,
-      NEXT_DIST_DIR: ".next-e2e",
-      NEXT_TELEMETRY_DISABLED: "1",
+  webServer: [
+    {
+      command: `node scripts/serve-static.mjs ${E2E_STATIC_DIR} ${E2E_PORT}`,
+      url: `http://localhost:${E2E_PORT}/`,
+      reuseExistingServer: false,
+      timeout: 30_000,
     },
-  },
+    {
+      command: `pnpm exec next dev --port ${E2E_ADMIN_PORT}`,
+      // DB に依存しないヘルスチェックで起動を待つ
+      url: `http://localhost:${E2E_ADMIN_PORT}/api/health`,
+      // 誤って開発用 DB に接続した既存サーバーを使わないよう、常に新しく起動する
+      reuseExistingServer: false,
+      timeout: 180_000,
+      env: {
+        DATABASE_URL: getE2eDatabaseUrl(),
+        MIRURIKU_ADMIN_ENABLED: "true",
+        MIRURIKU_FIXED_NOW: E2E_FIXED_NOW,
+        NEXT_DIST_DIR: ".next-e2e",
+        NEXT_TELEMETRY_DISABLED: "1",
+      },
+    },
+  ],
 });

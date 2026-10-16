@@ -78,14 +78,14 @@ describe("SlotForm", () => {
 describe("ReviewActions", () => {
   it("承認・却下のボタンを表示する", () => {
     render(<ReviewActions approveAction={vi.fn()} rejectAction={vi.fn()} canApprove />);
-    expect(screen.getByRole("button", { name: "承認して公開データに反映" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "承認して DB に反映" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "却下する" })).toBeEnabled();
     expect(screen.getByLabelText("却下理由メモ（任意）")).toBeInTheDocument();
   });
 
   it("承認できない候補では承認ボタンを無効にする", () => {
     render(<ReviewActions approveAction={vi.fn()} rejectAction={vi.fn()} canApprove={false} />);
-    expect(screen.getByRole("button", { name: "承認して公開データに反映" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "承認して DB に反映" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "却下する" })).toBeEnabled();
   });
 

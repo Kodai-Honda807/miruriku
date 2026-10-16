@@ -174,7 +174,7 @@ const eventSchema = z
   });
 
 export type RealEventDef = z.input<typeof eventSchema>;
-type ParsedEvent = z.output<typeof eventSchema>;
+export type ParsedEvent = z.output<typeof eventSchema>;
 
 export const realEventsSchema = z.array(eventSchema).superRefine((events, ctx) => {
   if (new Set(events.map((e) => e.slug)).size !== events.length) {
@@ -202,7 +202,8 @@ export function realChildId(slug: string, kind: "slot" | "session", key: string)
   return `real:${slug}:${kind}:${key}`;
 }
 
-function slotInstants(slot: ParsedEvent["slots"][number]): { startAt: Date | null; endAt: Date | null } {
+/** 放送枠の開始・終了の瞬間（日本時間の放送日・時刻から。終了が開始以前なら翌日とみなす） */
+export function slotInstants(slot: ParsedEvent["slots"][number]): { startAt: Date | null; endAt: Date | null } {
   if (!slot.airDate || !slot.startTime) return { startAt: null, endAt: null };
   const startAt = zonedToUtc(slot.airDate as LocalDate, slot.startTime, JST);
   if (!slot.endTime) return { startAt, endAt: null };

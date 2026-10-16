@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# デプロイ後の運用コマンド。
+# 以前の構成（Lightsail）の運用コマンド。静的配信（deploy/static/）への移行後、撤去するまでの間だけ使う。
 #
 #   ./deploy/ops.sh status               # コンテナの状態・ディスク・メモリ
 #   ./deploy/ops.sh logs [web|caddy|db]  # ログを表示（Ctrl+C で終了）

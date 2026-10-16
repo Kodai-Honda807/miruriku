@@ -1,8 +1,8 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
- * ルートの読み込み中表示（静的シェルが無い画面への遷移時など）。
- * 公開ページ以外でも使われるため、特定の画面に依存しない汎用の表示にする。
+ * 管理画面の読み込み中表示（DB を読む画面への遷移時など）。
+ * 公開ページには置かない（静的書き出しの HTML が読み込み中表示になり、JavaScript なしで本文が見えなくなるため）。
  */
 export default function Loading() {
   return (

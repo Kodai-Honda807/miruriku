@@ -16,7 +16,8 @@ import { countryNameJa, isOverseas, splitSlots } from "./event-format";
 const MAX_PROVIDERS_IN_DESCRIPTION = 3;
 
 export function eventPath(slug: string): string {
-  return `/events/${slug}`;
+  // 静的配信の URL（/events/<slug>/index.html）に合わせて末尾にスラッシュを付ける（next.config.ts の trailingSlash）
+  return `/events/${slug}/`;
 }
 
 /** 今年の放送・配信先（重複を除いた表示順） */

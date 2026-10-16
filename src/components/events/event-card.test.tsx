@@ -28,7 +28,7 @@ describe("EventCard: E2E 用の契約", () => {
     const { card } = renderCard();
     const link = within(card).getByRole("link", { name: "テストマラソンの大会詳細" });
     expect(link).toHaveTextContent("大会詳細");
-    expect(link).toHaveAttribute("href", "/events/test-marathon");
+    expect(link).toHaveAttribute("href", "/events/test-marathon/");
   });
 
   it("外部リンクは新しいタブで開き、外部サイトであることをアクセシブルネームで伝える", () => {

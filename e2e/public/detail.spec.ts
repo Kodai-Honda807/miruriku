@@ -1,15 +1,15 @@
 import { expect, test } from "@playwright/test";
 
-import { eventCard } from "../support/locators";
+import { eventCard, gotoHome } from "../support/locators";
 
 test.describe("大会詳細", () => {
   test("一覧から大会詳細へ移動し、日程・放送枠・リンクを区別して確認できる", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await eventCard(page, "demo-championships")
       .getByRole("link", { name: "みる陸デモ陸上競技選手権の大会詳細" })
       .click();
 
-    await expect(page).toHaveURL(/\/events\/demo-championships$/);
+    await expect(page).toHaveURL(/\/events\/demo-championships\/$/);
     await expect(page.getByRole("heading", { level: 1 })).toContainText("みる陸デモ陸上競技選手権");
 
     // 複数日開催とセッション
@@ -37,13 +37,23 @@ test.describe("大会詳細", () => {
   });
 
   test("下書きの大会の詳細ページは表示されない（404）", async ({ page }) => {
-    const res = await page.goto("/events/demo-draft-ekiden");
+    const res = await page.goto("/events/demo-draft-ekiden/");
     expect(res?.status()).toBe(404);
+    await expect(page.getByTestId("not-found")).toBeVisible();
     await expect(page.getByText("みる陸デモ下書き駅伝（非公開）")).toHaveCount(0);
   });
 
+  test("末尾の / がない URL は / 付きの URL へ転送される", async ({ page, request }) => {
+    const res = await request.get("/events/demo-championships", { maxRedirects: 0 });
+    expect(res.status()).toBe(301);
+    expect(res.headers()["location"]).toBe("/events/demo-championships/");
+    await page.goto("/events/demo-championships");
+    await expect(page).toHaveURL(/\/events\/demo-championships\/$/);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("みる陸デモ陸上競技選手権");
+  });
+
   test("下書きの放送枠は詳細ページにも表示されない", async ({ page }) => {
-    await page.goto("/events/demo-seaside-marathon");
+    await page.goto("/events/demo-seaside-marathon/");
     await expect(page.getByText("デモ配信プラス（架空）").first()).toBeVisible();
     await expect(page.getByText("下書きの放送枠（非公開・デモ）")).toHaveCount(0);
   });
@@ -51,7 +61,7 @@ test.describe("大会詳細", () => {
 
 test.describe("検索エンジン向けの情報", () => {
   test("大会名のタイトルと開催日入りの説明文を持ち、デモ大会は noindex で構造化データを出さない", async ({ page }) => {
-    await page.goto("/events/demo-championships");
+    await page.goto("/events/demo-championships/");
     await expect(page).toHaveTitle("みる陸デモ陸上競技選手権 | みる陸");
     await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /開催のみる陸デモ陸上競技選手権/);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);

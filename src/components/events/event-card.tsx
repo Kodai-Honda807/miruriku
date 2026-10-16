@@ -69,7 +69,7 @@ export function EventCard({ event, now, headingLevel = "h3" }: EventCardProps) {
 
       <footer className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3 text-sm">
         <Link
-          href={`/events/${encodeURIComponent(event.slug)}`}
+          href={`/events/${encodeURIComponent(event.slug)}/`}
           aria-label={`${event.name}の大会詳細`}
           className="inline-flex items-center gap-0.5 rounded-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >

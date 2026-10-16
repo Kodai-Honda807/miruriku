@@ -1,31 +1,31 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { connection } from "next/server";
-import { Suspense, cache } from "react";
 
-import { EventDetail } from "@/components/events/event-detail";
+import { EventDetailLive } from "@/components/events/event-detail-live";
 import { buildEventDescription, buildEventJsonLd, eventPath, serializeJsonLd } from "@/components/events/event-seo";
-import { EventDetailSkeleton } from "@/components/events/event-skeletons";
 import { BASE_OPEN_GRAPH, BASE_TWITTER, canonical } from "@/components/site/seo";
 import { SiteShell } from "@/components/site/site-shell";
+import { getNow } from "@/lib/clock";
 import { absoluteUrl } from "@/lib/site-url";
-import { getNow } from "@/server/clock";
-import { getPublicEventDetail } from "@/server/queries/public-events";
+import { getPublicEvent, listPublicEventDetails } from "@/server/public-data";
 
-type Params = PageProps<"/events/[slug]">["params"];
+/**
+ * 大会詳細。ビルド時に公開中の大会の数だけ /events/<slug>/index.html を書き出す。
+ * それ以外の slug（下書き・存在しない）はページ自体がなく、配信側で 404 になる（dynamicParams = false）。
+ */
+export const dynamicParams = false;
 
-/** generateMetadata とページ本体で同じリクエスト内の DB 読み取りを共有する */
-const loadEvent = cache((slug: string) => getPublicEventDetail(slug));
+export function generateStaticParams() {
+  return listPublicEventDetails().map((event) => ({ slug: event.slug }));
+}
 
 /**
  * 大会名をタイトルにし、開催日と放送・配信先を入れた説明文・canonical・OGP を付ける。
- * ページ本体が params に依存して Suspense 内でリクエスト時に描画されるため、
- * メタデータもリクエスト時に解決される（"use cache" は付けない）。
  * デモ（架空）の大会は検索エンジンに載せない。
  */
 export async function generateMetadata({ params }: PageProps<"/events/[slug]">): Promise<Metadata> {
   const { slug } = await params;
-  const event = await loadEvent(slug);
+  const event = getPublicEvent(slug);
   if (!event) return { title: "大会が見つかりません", robots: { index: false } };
   const description = buildEventDescription(event);
   const path = eventPath(event.slug);
@@ -39,28 +39,12 @@ export async function generateMetadata({ params }: PageProps<"/events/[slug]">):
   };
 }
 
-/**
- * 大会詳細。params は <Suspense> の内側の子コンポーネントで await する（Cache Components）。
- * 下書き・存在しない slug は notFound()。
- */
-export default function EventPage({ params }: PageProps<"/events/[slug]">) {
-  return (
-    <SiteShell>
-      <Suspense fallback={<EventDetailSkeleton />}>
-        <EventDetailContent params={params} />
-      </Suspense>
-    </SiteShell>
-  );
-}
-
-async function EventDetailContent({ params }: { params: Params }) {
+export default async function EventPage({ params }: PageProps<"/events/[slug]">) {
   const { slug } = await params;
-  await connection();
-  const now = getNow();
-  const event = await loadEvent(slug);
+  const event = getPublicEvent(slug);
   if (!event) notFound();
   return (
-    <>
+    <SiteShell>
       {event.isDemo ? null : (
         <script
           type="application/ld+json"
@@ -69,7 +53,7 @@ async function EventDetailContent({ params }: { params: Params }) {
           }}
         />
       )}
-      <EventDetail event={event} now={now} />
-    </>
+      <EventDetailLive event={event} initialNow={getNow().toISOString()} />
+    </SiteShell>
   );
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# deploy/*.sh の共通処理。単体では実行しない（source して使う）。
+# deploy/*.sh・deploy/static/*.sh の共通処理。単体では実行しない（source して使う）。
+# Lightsail 用の部分（静的 IP・SSH など）は、以前の構成を撤去するまでの ops.sh / destroy.sh / switch-dns.sh --rollback 用。
 # shellcheck disable=SC2034  # 呼び出し元のスクリプトで使う変数を定義する
 
 set -euo pipefail
@@ -117,7 +118,7 @@ check_aws_identity() {
 static_ip() {
   local ip
   ip="$(aws_ls get-static-ip --static-ip-name "$LIGHTSAIL_STATIC_IP_NAME" --query 'staticIp.ipAddress' --output text 2>/dev/null || true)"
-  [[ -n "$ip" && "$ip" != "None" ]] || die "静的 IP ${LIGHTSAIL_STATIC_IP_NAME} が見つかりません。先に deploy/provision.sh を実行してください"
+  [[ -n "$ip" && "$ip" != "None" ]] || die "静的 IP ${LIGHTSAIL_STATIC_IP_NAME} が見つかりません（Lightsail はすでに削除されている可能性があります）"
   printf '%s' "$ip"
 }
 

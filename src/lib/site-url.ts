@@ -1,9 +1,8 @@
 /**
  * 公開サイトの絶対 URL（canonical・OGP・サイトマップ・robots.txt で使う）。
  *
- * - MIRURIKU_SITE_URL（例: https://13-115-193-47.sslip.io）で指定する。本番ではデプロイ時に
- *   DOMAIN から自動で設定する（deploy/compose.prod.yml → Dockerfile の build arg と実行時の環境変数）。
- * - メタデータはビルド時に、サイトマップはリクエスト時に読むため、両方で同じ値を渡す。
+ * - MIRURIKU_SITE_URL（例: https://miruriku.com）で指定する。本番ではデプロイスクリプトが
+ *   deploy/.env の DOMAIN から設定して静的ビルドする（deploy/static/deploy.sh）。
  * - 未設定・不正な値のときは null を返し、呼び出し側は絶対 URL を出さない
  *   （localhost などの誤った canonical を検索エンジンに伝えないため）。
  */

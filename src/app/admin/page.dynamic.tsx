@@ -70,7 +70,7 @@ async function DashboardSummary() {
           <CardTitle>
             <h2>未レビューの収集候補</h2>
           </CardTitle>
-          <CardDescription>承認するまで公開データには反映されません</CardDescription>
+          <CardDescription>承認するまで DB には反映されません</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2">
           <p className="text-2xl font-semibold">{summary.pending} 件</p>

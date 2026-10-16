@@ -1,194 +1,104 @@
-# AWS（Lightsail）へのデプロイ
+# AWS（S3 + CloudFront）へのデプロイ
 
-WSL（Ubuntu）から AWS CLI と SSH だけで、Amazon Lightsail のインスタンス 1 台にデプロイします。
-数人で使う前提の、安く・壊れにくく・後片付けしやすい構成です。
+公開サイトは静的ファイル（HTML・JS・CSS）として書き出し、非公開の S3 バケットに置いて CloudFront で配信します。
+WSL（Ubuntu）から 1 コマンドでビルド・AWS リソースの作成・アップロード・確認まで行います。
 
 ```
-利用者 ─ HTTPS ─ Lightsail インスタンス（Ubuntu 24.04、2GB）
-                  └ Docker Compose
-                     ├ caddy  … HTTPS 終端（Let's Encrypt で証明書を自動取得）。/admin は常に 404
-                     ├ web    … Next.js（Dockerfile の runner）。外部には公開しない
-                     ├ db     … PostgreSQL 18。ポートは公開しない
-                     └ migrate / tools … デプロイ時に 1 回だけ実行（マイグレーション・実在データの反映）
+利用者 ─ HTTPS ─ CloudFront（miruriku.com / www.miruriku.com、ACM 証明書）
+                  ├ CloudFront Functions … /events/<slug>/ → index.html、末尾 / の付与、www → www なしへ転送
+                  └ S3 バケット（非公開。CloudFront からだけ読める）
+                       └ pnpm build の出力（out/）
 ```
 
-- 管理画面は本番モードでは常に無効です（アプリ側で 404、さらに Caddy でも遮断）。候補のレビューはローカルで行います。
-- DB のパスワードはサーバー上で生成し、`/opt/miruriku/shared/secrets.env`（権限 600）にだけ保存します。手元にもイメージにも入りません。
-- SSH（22 番）は、実行した時点のグローバル IP からだけ許可します。80/443 番だけを公開します。
+- 公開データは `data/real-events.ts`（実在の大会の正本）からビルド時に作ります。本番に DB はありません（[docs/real-data.md](real-data.md)）。
+- 管理画面は静的ビルドに含まれません（`/admin` は 404）。収集候補のレビューや DB を使う作業は、ローカルの開発サーバーで行います。
+- サーバーがないため、OS やコンテナの保守、SSH の許可、DB のバックアップは不要です。
+- データを直したら、再ビルドしてデプロイするまで公開サイトには反映されません。
 
 ## 費用の目安
 
-| 項目 | 料金 |
-| --- | --- |
-| インスタンス（`small_3_0`: 2GB メモリ・60GB SSD・転送 3TB） | 月 12 USD |
-| 静的 IP（インスタンスに割り当てている間） | 無料 |
-| 自動スナップショット（毎日・7 世代） | 保存容量 × 0.05 USD/GB月（数 GB なら月 1 USD 未満〜数 USD） |
+| 想定 | 月間ページビュー | 月額 |
+| --- | --- | --- |
+| 数人が毎日見る | 1,000 | 約 0.1 USD |
+| 大会シーズンに増える | 10,000 | 約 0.4 USD |
+| ボットや拡散で急増 | 100,000 | 約 3.6 USD |
 
-料金は [Lightsail の料金ページ](https://aws.amazon.com/lightsail/pricing/)（2026-10 時点）によります。インスタンスは**停止していても課金されます**。課金を止めるには `./deploy/destroy.sh` で削除してください。新規利用者向けの無料枠がある場合がありますが、条件は料金ページで確認してください。
-
-2GB のプランにしているのは、サーバー上で `next build` を行うためです（1GB では不足するおそれがあります）。
-
-### ほかの構成を選ばなかった理由
-
-- App Runner: 2026-04-30 以降、新規の利用者を受け付けていません（[AWS の案内](https://aws.amazon.com/apprunner/)）。
-- ECS Fargate + RDS + ALB（docs/design.md の将来構成）: ロードバランサーと RDS だけで月 30 USD 以上かかり、数人で使うには過剰です。利用者が増えたら移行を検討します。
-- Lightsail のコンテナサービス + マネージド DB: 月 25 USD ほど。マイグレーションやデータの反映を 1 回だけ実行する手段が乏しいため見送りました。
+- 無料枠を除いた従量課金の試算です（CloudFront の日本向け転送 0.114 USD/GB・HTTPS リクエスト 0.012 USD/1 万件、S3 の保存・リクエスト、キャッシュ削除 月 1,000 パスまで 0 USD。[CloudFront の価格表](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudFront/current/index.json)、[S3 の価格表](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonS3/current/ap-northeast-1/index.json)、2026-10 時点）。
+- ACM の証明書は無料です。Route 53 のホストゾーン（月 0.5 USD）とドメインの登録料は別にかかります。
+- アクセス数に比例して増えるため、AWS Budgets で月 3 USD などのアラートを設定しておくと安心です。
 
 ## 事前準備（WSL）
 
-1. リポジトリは WSL のファイルシステム（例 `~/src/miruriku`）に clone します。`/mnt/c` 配下では SSH 鍵の権限を設定できず、実行も遅くなります。
-2. 必要なコマンド: `aws`（AWS CLI v2）、`ssh`、`ssh-keygen`、`git`、`curl`、`tar`、`gzip`。手元に Docker は不要です（ビルドはサーバー上で行います）。
+1. リポジトリは WSL のファイルシステム（例 `~/miruriku`）に clone します。
+2. 必要なコマンド: `aws`（AWS CLI v2）、`git`、`curl`、`tar`、Node.js（`.nvmrc` の 24）、pnpm（`corepack enable`）。
+3. AWS の認証情報を名前付きプロファイルとして設定します（例: `aws configure sso --profile miruriku`）。必要な権限は [deploy/iam-policy.json](../deploy/iam-policy.json) の `MirurikuStaticHosting` と `MirurikuRoute53` です。
+4. `deploy/.env` を用意します（`cp deploy/.env.example deploy/.env`）。使うのは `AWS_PROFILE` と `DOMAIN`（例 `DOMAIN="miruriku.com"`）です。
+5. ドメインを Route 53 で登録しておきます（登録時に作られるホストゾーンをそのまま使います）。
 
-   ```bash
-   sudo apt-get update && sudo apt-get install -y openssh-client git curl unzip
-   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-   unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install
-   aws --version
-   ```
-
-3. AWS の認証情報を、名前付きプロファイルとして設定します（アクセスキーを `deploy/.env` に書くのは非推奨です）。
-
-   ```bash
-   aws configure sso --profile miruriku   # IAM Identity Center を使う場合（推奨）
-   # または
-   aws configure --profile miruriku       # IAM ユーザーのアクセスキーを使う場合
-   ```
-
-   このユーザー（ロール）に必要な権限は [deploy/iam-policy.json](../deploy/iam-policy.json) です。Lightsail の操作と、独自ドメインに切り替えるための Route 53 の操作（`deploy/domain.sh`）に絞っています。
-
-4. 設定ファイルを作ります。
-
-   ```bash
-   cp deploy/.env.example deploy/.env
-   # AWS_PROFILE・リージョン・ドメインなどを確認して編集
-   ```
-
-## 初回のデプロイ
+## デプロイ
 
 ```bash
-./deploy/provision.sh   # Lightsail のリソースを作成（料金が発生します。内容を表示してから確認を求めます）
-./deploy/deploy.sh      # ビルド → マイグレーション → 実在データの反映 → 起動 → 動作確認
+aws sso login --profile miruriku   # SSO の場合。セッションが切れていたら
+./deploy/static/deploy.sh
 ```
 
-- `provision.sh` が作るもの: インスタンス、静的 IP、SSH 鍵の登録（秘密鍵は手元の `~/.ssh/miruriku-lightsail` のまま）、ファイアウォール、自動スナップショット。何度実行しても、既にあるものは作り直しません。
-- 初回起動時に `deploy/cloud-init.sh` が Docker の導入・スワップの追加・自動セキュリティ更新の有効化を行います（数分かかります）。
-- `deploy.sh` は**コミット済みの HEAD だけ**を転送します。未コミットの変更があると止まります（`--allow-dirty` で続行できますが、変更は反映されません）。
-- 初回のビルドは 10 分ほどかかります。完了すると `https://<ドメイン>/api/health` と、`/admin` が 404 になることを確認します。
+1. コミット済みの HEAD を一時ディレクトリに展開し、手元の `.env` や環境変数を使わずに `pnpm build` します（サイト URL は `https://<DOMAIN>`）。
+2. CloudFormation スタック `miruriku-static`（us-east-1）を作成・更新します。初回は作成する内容と費用の目安を表示し、`yes` の入力を求めます。証明書の発行と CloudFront の配置で 5〜15 分ほどかかります。
+3. S3 にアップロードし、CloudFront のキャッシュを削除します。
+4. `https://<ID>.cloudfront.net/` でトップ・大会詳細・404・転送を確認します。
+5. DNS がまだ CloudFront を向いていなければ、切り替えの内容を表示して `yes` の入力を求めます（`./deploy/static/switch-dns.sh`）。
 
-### ドメイン
+2 回目以降は、`data/real-events.ts` やコードを直してコミットしたあとに同じコマンドを実行するだけです（確認なしで更新し、DNS の切り替えは行いません）。未コミットの変更はデプロイされません（`--allow-dirty` で警告のうえ HEAD をデプロイ）。
 
-`deploy/.env` の `DOMAIN` が空なら、`1-2-3-4.sslip.io` のような名前を使います（[sslip.io](https://sslip.io/) は IP アドレスをそのまま名前として解決する公開 DNS です）。
+### キャッシュ
 
-### 独自ドメイン（例: miruriku.com）を使う
-
-Route 53 でドメインを登録したら、次の 1 コマンドで切り替えます。
-
-```bash
-git pull
-./deploy/domain.sh miruriku.com
-```
-
-`domain.sh` が行うこと（何度実行しても同じ結果になります。変更の前に確認を求めます）:
-
-1. 登録者メールアドレスの認証状況を確認する（未認証なら、Route 53 から届いたメールのリンクを開くよう案内して中止）
-2. 登録時に自動で作られたホストゾーンに、A レコード（`miruriku.com` と `www.miruriku.com` → 静的 IP、TTL 300）を作成・更新する
-3. 手元の DNS で静的 IP に解決されるまで最大 15 分待つ（登録直後でまだ解決されない場合は中止。しばらくしてから再実行する）
-4. `deploy/.env` を `DOMAIN="miruriku.com"` に書き換え、`./deploy/deploy.sh` を実行する
-
-使う AWS の権限は [deploy/iam-policy.json](../deploy/iam-policy.json) の `MirurikuRoute53Domain` です（Route 53 のレコード操作と、ドメイン登録情報の読み取り）。
-
-`deploy.sh` は、ドメインが静的 IP に向いていなければ中止します（証明書を取得できないため）。
-`www.<ドメイン>`（DNS が向いている場合）と以前の sslip.io の URL は、パスを保ったまま `https://<ドメイン>` へ 301 転送します。
-canonical・OGP・サイトマップの URL も新しいドメインになります。
-
-切り替えたあとに行うこと（どちらも任意。行わなくてもサイトの公開と GA の計測は続きます）:
-
-- Google アナリティクス: 管理 →「データストリーム」でウェブストリームの URL を `https://miruriku.com` に変更する（表示上の設定。測定 ID は変わらず、変更しなくても計測される）
-- Google Search Console（検索での表示状況を見たい場合）: 「ドメイン」プロパティで `miruriku.com` を追加し、表示された TXT レコードを Route 53 のホストゾーンに追加して所有権を確認する。確認後に `https://miruriku.com/sitemap.xml` を送信する
-
-## 更新
-
-```bash
-# data/real-events.ts やコードを直してコミットしたあと
-./deploy/deploy.sh
-```
-
-毎回、マイグレーションと実在データの反映（`pnpm data:load` 相当）を行います。データを変えずにコードだけ反映するときは `--skip-data-load` を付けます。ビルドに失敗した場合は、動いているコンテナはそのまま残ります。
-
-## タグ（他のアプリのリソースとの区別）
-
-`deploy/.env` の `RESOURCE_TAGS`（既定 `project=miruriku environment=production managed-by=miruriku-deploy`）を、`provision.sh` の実行のたびに付けます。作成済みのリソースにも付け直すので、値を変えたときは `./deploy/provision.sh` を再実行してください（既存のタグは消しません）。
-
-| リソース | タグ | 区別のしかた |
+| 対象 | Cache-Control | 理由 |
 | --- | --- | --- |
-| インスタンス | 付く（作成時と毎回の provision） | タグ |
-| SSH 鍵（キーペア） | 付く | タグ |
-| 静的 IP | **付けられない**（Lightsail がタグに対応していない） | 名前（`miruriku-ip`） |
-| 自動スナップショット | **引き継がれない**（Lightsail の仕様） | 元のインスタンス名 |
+| `/_next/static/*`（ファイル名にハッシュが入る） | `public, max-age=31536000, immutable` | 内容が変わると名前が変わる。古いファイルも消さない（デプロイ直前に開いたページが読み込めるように） |
+| それ以外（HTML、RSC のデータ、sitemap.xml など） | `public, max-age=0, s-maxage=31536000, must-revalidate` | CloudFront に置き、デプロイのたびに `/*` を削除する。ブラウザは毎回確認する |
 
-Lightsail でタグを付けられるリソースの種類は [Lightsail のタグのドキュメント](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags.html)、自動スナップショットの扱いは [自動スナップショットのドキュメント](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configuring-automatic-snapshots.html) にあります。この構成では Lambda などほかのサービスのリソースは作りません。
+絞り込みの URL（`/?period=week` など）はクエリをキャッシュキーに含めず、同じ HTML を返します（絞り込みはブラウザで行います）。
+
+### DNS を戻す
 
 ```bash
-./deploy/ops.sh resources   # RESOURCE_TAGS の最初のタグで絞り込んで、このアプリのリソースを一覧表示
+./deploy/static/switch-dns.sh --rollback   # Lightsail の静的 IP に戻す（Lightsail を削除するまで）
 ```
 
-請求額をタグで分けて見たい場合は、Billing and Cost Management の「コスト配分タグ」で `project` を有効にします（有効にした時点以降の利用分から反映されます）。
+## Lightsail（以前の構成）の撤去
+
+静的配信に切り替えて問題がないことを確認したら、Lightsail のインスタンスを削除して月 12 USD ほどの課金を止めます。**削除は元に戻せません。** 実行前に確認してください。
+
+```bash
+./deploy/ops.sh backup   # 念のため DB のダンプを deploy/backups/ に保存（承認済みの候補などを残したい場合）
+./deploy/destroy.sh      # インスタンス・静的 IP・SSH 鍵の登録を削除（インスタンス名の入力を求めます）
+```
+
+- 削除すると、以前の URL（`https://13-115-193-47.sslip.io/`）は使えなくなります。
+- 撤去が終わったら、`deploy/lib.sh`・`deploy/ops.sh`・`deploy/destroy.sh` の Lightsail 用の部分と、`deploy/.env` の Lightsail・SSH の設定は削除して構いません。
 
 ## 検索エンジン向けの設定（SEO）
 
-- 公開 URL は `MIRURIKU_SITE_URL`（`https://<DOMAIN>`）として、ビルド時（canonical・OGP）と実行時（サイトマップ）の両方に自動で渡します。未設定なら絶対 URL を出しません。
-- 出しているもの: ページごとのタイトルと説明文、canonical（絞り込み条件付きの URL は `/` にまとめる）、OGP / X カード、`robots.txt`（`/admin` と `/api/` を除外）、`sitemap.xml`（公開中の実在の大会。デモ大会は除外）、大会詳細の構造化データ（schema.org `SportsEvent`）、トップの `WebSite`、アイコン一式とマニフェスト。
-- デモ（架空）の大会と、存在しないページは `noindex` です。
-- 公開後に行うこと（任意）:
-  1. [Google Search Console](https://search.google.com/search-console) にプロパティを追加し、所有権を確認する（独自ドメインなら「ドメイン」プロパティ + DNS の TXT レコード。sslip.io では DNS で確認できないため「URL プレフィックス」+「HTML タグ」になり、タグをコードに追加する必要がある）
-  2. `https://<DOMAIN>/sitemap.xml` を送信する
-  3. [リッチリザルト テスト](https://search.google.com/test/rich-results) で大会詳細ページの構造化データを確認する
-- URL（ドメイン）が変わると、それまでの検索エンジンの評価は引き継がれにくくなります。静的配信への移行などで URL を変える予定があるなら、先に独自ドメインを決めておくのが確実です。
+- サイト URL（`MIRURIKU_SITE_URL=https://<DOMAIN>`）はデプロイ時に設定してビルドします。canonical・OGP・`sitemap.xml`・`robots.txt` はビルド時に作られます。
+- URL は末尾にスラッシュを付けた形（`/events/<slug>/`）です。スラッシュなしの URL は 301 で転送します。
+- 出しているもの: ページごとのタイトルと説明文、canonical（絞り込み条件付きの URL は `/` にまとめる）、OGP / X カード、`robots.txt`、`sitemap.xml`（公開中の実在の大会）、大会詳細の構造化データ（schema.org `SportsEvent`）、トップの `WebSite`、アイコン一式とマニフェスト。
+- 公開後に行うこと（任意）: [Google Search Console](https://search.google.com/search-console) に「ドメイン」プロパティを追加して DNS の TXT レコードで所有権を確認し、`https://<DOMAIN>/sitemap.xml` を送信します。
 
 ## アクセス解析（Google アナリティクス）
 
-- 測定 ID `G-E17SENSEG0` の GA4 タグ（gtag.js）を、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
-- 手元で本番ビルドを確認するときに計測したくない場合は、ビルド時に `NEXT_PUBLIC_DISABLE_ANALYTICS=1` を指定します。
-- 計測しているときは、フッターに Google アナリティクスの利用と Google のポリシーへのリンクを表示します。
-- フィルタ変更や詳細ページへの移動（画面の再読み込みを伴わない遷移）は、GA4 のデータストリーム設定「拡張計測機能」の「ブラウザの履歴イベントに基づくページの変更」（既定で有効）でページビューになります。
-- 反映の確認は、GA の「レポート」→「リアルタイム」で行います。
-
-## 運用コマンド
-
-```bash
-./deploy/ops.sh status               # コンテナの状態・ディスク・メモリ
-./deploy/ops.sh logs web             # ログ（web / caddy / db）
-./deploy/ops.sh ssh                  # SSH 接続
-./deploy/ops.sh collect --all        # 収集 CLI を本番 DB に対してドライランで実行（候補は保存しない）
-./deploy/ops.sh backup               # DB のダンプを deploy/backups/ に保存
-./deploy/ops.sh allow-ssh            # 自宅の IP が変わったときに SSH の許可を更新
-./deploy/ops.sh resources            # このアプリの Lightsail リソースとタグの一覧
-./deploy/destroy.sh                  # すべて削除して課金を止める（DB のデータも消えます）
-```
-
-### バックアップからの復元
-
-```bash
-# 手元のダンプをサーバーに送り、DB に復元する（既存のデータは置き換わります）
-./deploy/ops.sh ssh   # 先に接続できることを確認
-scp -i ~/.ssh/miruriku-lightsail -o UserKnownHostsFile=~/.ssh/miruriku_known_hosts \
-  deploy/backups/<ファイル>.dump ubuntu@<静的IP>:/opt/miruriku/backups/
-# サーバー上で
-docker compose -p miruriku \
-  --env-file /opt/miruriku/shared/secrets.env --env-file /opt/miruriku/shared/settings.env \
-  -f /opt/miruriku/current/deploy/compose.prod.yml \
-  exec -T db pg_restore -U miruriku -d miruriku --clean --if-exists < /opt/miruriku/backups/<ファイル>.dump
-```
+- 測定 ID `G-E17SENSEG0` の GA4 タグを、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
+- 絞り込みの変更や詳細ページへの移動は、GA4 の「拡張計測機能」の「ブラウザの履歴イベントに基づくページの変更」（既定で有効）でページビューになります。
 
 ## うまくいかないとき
 
-- `provision.sh` が「初期設定が完了しません」で止まった: 作成済みのリソースはそのままで構いません。`./deploy/provision.sh` をもう一度実行すると、初回起動時の初期設定（`deploy/cloud-init.sh`）が失敗していれば SSH 経由で実行し直します。それでも失敗する場合は、表示されたログか、サーバーの `~/miruriku-init.log`・`/var/log/cloud-init-output.log` を確認してください。
-- `deploy/cloud-init.sh` を編集するとき: Lightsail はこのスクリプトの前に独自の初期化処理を付け足して `/bin/sh`（dash）で実行するため、1 行目の `#!` は効きません。`set -o pipefail`・`[[ ]]`・配列など bash 専用の書き方は使わないでください（`shellcheck -s sh deploy/cloud-init.sh` で確認できます）。
+- 初回の作成で失敗した（スタックが `ROLLBACK_COMPLETE`）: CloudFormation コンソール（バージニア北部 us-east-1）の「イベント」で原因を確認し、スタックを削除してから再実行します。バケットは削除されずに残る設定です（中身がなければ S3 コンソールで削除できます）。
+- 証明書の発行で止まっている: ホストゾーンに検証用の CNAME レコードが作られているか、ドメインのネームサーバーがホストゾーンと一致しているかを確認します。
+- 表示が更新されない: デプロイの最後にキャッシュを削除しています。ブラウザを再読み込みしても古い場合は、デプロイが完了しているか（`deploy.sh` の最後の表示）を確認してください。
 
 ## 注意点・未対応のこと
 
-- 認証のない管理画面は公開しません。本番で候補のレビューや編集をしたい場合は、先に管理者の認証・認可を実装する必要があります。
-- 公開した URL は誰でも開けます。数人だけで使いたい場合は、URL を限られた人にだけ共有してください（検索エンジンへの登録を避ける設定は未対応です）。
-- 収集 CLI の定期実行は設定していません。
-- サーバーは 1 台なので、OS の再起動やデプロイ中は数十秒止まります。
-- OS のセキュリティ更新は自動で適用されますが、カーネル更新後の再起動は手動です（`./deploy/ops.sh ssh` → `sudo reboot`）。
+- 認証のない管理画面は公開しません（静的ビルドには含まれません）。
+- 公開した URL は誰でも開けます。
+- 収集 CLI の定期実行は設定していません。ローカルで `pnpm collect --all --dry-run` を実行して公式ページの変化を確かめます（[docs/real-data.md](real-data.md)）。
+- JavaScript が無効な場合、一覧はビルド時点の「これから開催される大会」を表示し、絞り込みはできません（その旨を表示します）。
+- 「開催中」「終了」などの表示はブラウザの時計で判定します。端末の時計が大きくずれていると表示もずれます。

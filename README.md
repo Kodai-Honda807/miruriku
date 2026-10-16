@@ -7,7 +7,7 @@
 - 対象: 駅伝・マラソン・トラック（陸上競技）
 - 時刻は日本時間で表示します。海外の大会では現地の日時も併記します。
 - 「情報が見つからない」と「公式に放送・配信なし」は別の状態として区別して表示します。
-- 現在のバージョンは**ローカルで動かす MVP** です。公開運用はまだ想定していません（[公開運用の前に必要な作業](#aws-などで公開する前に必要な作業)を参照）。
+- 公開サイトは静的ファイルとして書き出し、S3 + CloudFront で配信しています（https://miruriku.com/ 。[docs/deploy.md](docs/deploy.md)）。DB と管理画面はローカル専用です。
 - 実在の直近大会（駅伝・マラソン 6 件、2026-10-16 確認）を `data/real-events.ts` に登録しています。登録・更新の方法とルールは [docs/real-data.md](docs/real-data.md) を参照してください。
 
 設計の詳細は [docs/design.md](docs/design.md) にあります。
@@ -17,9 +17,11 @@
 | パス | 内容 |
 | --- | --- |
 | `/` | 大会の一覧（時系列）。期間（今日／今週／この先）・競技・視聴方法・無料ネット配信・大会名検索で絞り込めます。絞り込み条件は URL のクエリに保持されるので、そのまま共有できます。 |
-| `/events/[slug]` | 大会の詳細。放送・配信枠、開催日程、情報源、確認日時を表示します。下書き・存在しない大会は HTTP 404 です。 |
-| `/admin` | ローカル専用の管理画面。既定では無効です（[管理機能の有効化](#管理機能の有効化ローカル専用)を参照）。 |
-| `/api/health` | 死活監視用（DB には接続しません）。 |
+| `/events/[slug]/` | 大会の詳細。放送・配信枠、開催日程、情報源、確認日時を表示します。ビルド時に公開中の大会の数だけ書き出し、それ以外は HTTP 404 です。 |
+| `/admin` | ローカル専用の管理画面（開発サーバーだけ）。既定では無効です（[管理機能の有効化](#管理機能の有効化ローカル専用)を参照）。 |
+| `/api/health` | 開発サーバーの起動確認用（DB には接続しません。静的ビルドには含めません）。 |
+
+公開ページのデータは、ビルド時に `data/real-events.ts` から作ります（DB には接続しません）。一覧の絞り込みと「今日」「開催中」などの判定は、ブラウザで現在時刻を使って行います。
 
 管理画面（有効時のみ）:
 
@@ -102,11 +104,13 @@ SEED_BASE_DATE=2026-10-10 pnpm db:seed  # 基準日を固定して投入（既�
 ## Web アプリの起動
 
 ```bash
-pnpm dev                 # 開発サーバー（http://localhost:3000）
-pnpm build && pnpm start # 本番モードで確認（管理画面は常に無効）
+pnpm dev                    # 開発サーバー（http://localhost:3000）。公開ページ・管理画面
+pnpm build && pnpm preview  # 静的書き出し（out/）を本番と同じ URL 処理で確認（http://localhost:3000）
 ```
 
-`pnpm build` には DB は必要ありません（ビルド中に DB へ接続しません）。`pnpm start` で表示するときは `DATABASE_URL` が必要です。
+- 公開ページは、開発サーバーでも静的ビルドでも `data/real-events.ts` の内容を表示します（DB のデモデータは表示しません）。
+- `pnpm build` は静的書き出し（`output: "export"`）です。DB は必要ありません。管理画面（`*.dynamic.tsx`）は含まれません。
+- `pnpm preview` は `scripts/serve-static.mjs` で `out/` を配信します。URL の書き換え・転送は本番の CloudFront Functions（`deploy/static/viewer-request.js`）と同じコードです。
 
 ## テスト
 
@@ -115,7 +119,7 @@ pnpm lint         # ESLint
 pnpm typecheck    # next typegen + tsc --noEmit
 pnpm test         # 単体テスト（unit: *.test.ts）と UI テスト（ui: *.test.tsx）
 pnpm test:db      # DB 統合テスト（*.db.test.ts）。TEST_DATABASE_URL の DB を使います
-pnpm build        # 本番ビルド（DB 不要）
+pnpm build        # 静的書き出し（DB 不要）
 
 # E2E（初回のみブラウザを導入）
 pnpm exec playwright install --with-deps chromium
@@ -124,8 +128,9 @@ pnpm test:e2e
 
 - テストは実行環境のタイムゾーンに依存しないよう、`TZ=America/Los_Angeles` で実行されます。時刻は固定値（または引数の `now`）を使います。
 - `pnpm test:db` は、`TEST_DATABASE_URL` の**データベース名が `_test` で終わる場合だけ**動きます（開発用 DB を誤って消さないため）。開始時にマイグレーションを適用し、テーブルを空にします。
-- `pnpm test:e2e` は `E2E_DATABASE_URL` の DB（名前が `_e2e` で終わるもの）を初期化します。基準日 2026-10-10 で固定したデモデータと、固定ファイルによる収集候補を用意し、ポート 3100・出力先 `.next-e2e` で開発サーバーを起動して実行します（`pnpm dev` と同時に動かせます）。アプリの時計は `MIRURIKU_FIXED_NOW=2026-10-10T12:00:00+09:00` で固定されます（`e2e/support/env.ts`）。
-- E2E は管理画面を使うため、本番ビルドではなく開発サーバー（Turbopack）で実行します。開発サーバーとブラウザで合計 3〜3.5GB ほどのメモリを使います。メモリが少ない環境では OOM で開発サーバーやブラウザが強制終了されることがあります。
+- `pnpm test:e2e` は、まず `e2e/prepare.ts` で `E2E_DATABASE_URL` の DB（名前が `_e2e` で終わるもの）を初期化し、基準日 2026-10-10 で固定したデモデータと、固定ファイルによる収集候補を用意します。続けて DB の公開中の大会を JSON に書き出し、それを使って公開サイトを静的ビルドします（`.e2e/out`。時計は `NEXT_PUBLIC_MIRURIKU_FIXED_NOW=2026-10-10T12:00:00+09:00` で固定）。
+- 公開ページのテストは、静的ビルドを本番と同じ URL 処理の静的サーバー（ポート 3100）で、管理画面のテストは開発サーバー（ポート 3101、出力先 `.next-e2e`、`MIRURIKU_FIXED_NOW` で時計を固定）で実行します（`pnpm dev` と同時に動かせます）。
+- テストだけを直して繰り返すときは `E2E_SKIP_BUILD=1 pnpm test:e2e` で静的ビルドを省けます。開発サーバーとブラウザで合計 3GB ほどのメモリを使います。
 - `playwright install --with-deps` には管理者権限が必要です。権限がない環境では、Chromium が必要とする共有ライブラリ（`libnss3` など）を別途用意してください。
 
 ### CI（GitHub Actions）
@@ -136,13 +141,12 @@ pnpm test:e2e
 | --- | --- |
 | `check` | `pnpm lint` / `pnpm typecheck` / `pnpm test` |
 | `db-test` | PostgreSQL 18.6 の service コンテナを使った `pnpm test:db` |
-| `build` | `DATABASE_URL` を設定しない状態で `pnpm build` |
+| `build` | `DATABASE_URL` を設定しない状態で `pnpm build`（静的書き出し）。管理画面が含まれないことと sitemap.xml を確認 |
 | `e2e` | PostgreSQL の service コンテナと Chromium で `pnpm test:e2e`。失敗したときはレポートをアーティファクトとして保存 |
-| `docker` | `runner` / `migrate` / `collector` の各イメージをビルドし（push はしない）、非 root で動くことを確認 |
 
 ## 収集 CLI
 
-登録済みで `collectEnabled` が有効な情報源（Source）だけを対象に、放送・配信情報を取得・抽出します。抽出結果は**収集候補（未レビュー）として保存されるだけ**です。人が承認するまで、公開データは変わりません。
+登録済みで `collectEnabled` が有効な情報源（Source）だけを対象に、放送・配信情報を取得・抽出します。抽出結果は**収集候補（未レビュー）として保存されるだけ**です。人が承認するまで DB は変わりません。公開サイトは `data/real-events.ts` から作るため、承認しても変わりません（変化を見つけたらファイルを直してデプロイします）。
 
 ```bash
 pnpm collect --event <slug> [--fetch http|fixture] [--provider rule-based|fixture] [--dry-run]
@@ -209,7 +213,8 @@ MIRURIKU_ADMIN_ENABLED="true"
 ```
 
 - 管理機能が有効になるのは、`MIRURIKU_ADMIN_ENABLED` が文字列 `"true"` で、**かつ** `NODE_ENV` が `production` ではない場合だけです。`"TRUE"` や `"1"` では有効になりません。
-- **本番モード（`pnpm build` / `pnpm start` / Docker イメージ）では、設定に関わらず常に無効です。** 画面（layout・page）、すべての Server Action、proxy の各所で判定しています。
+- **管理画面は開発サーバー（`pnpm dev`）だけで動きます。** 静的ビルドには含まれず、本番には存在しません。開発サーバーでも、画面（layout・page）、すべての Server Action、proxy の各所で有効かどうかを判定しています。
+- 承認や編集は**ローカルの DB にだけ**反映されます。公開サイトに載せるには、出典を確かめて `data/real-events.ts` を直し、デプロイします（[docs/real-data.md](docs/real-data.md)）。
 - 管理画面では、大会・放送枠・情報源の作成と編集、下書きと公開の切り替え、収集候補の一覧・差分の確認・承認・却下ができます。
 
 > [!IMPORTANT]
@@ -223,59 +228,22 @@ MIRURIKU_ADMIN_ENABLED="true"
 - 実在する大会の未検証の情報を、確定情報として載せることはしません。
 - 地上波のみ・YouTube 無料ライブ・地上波とネットの併用・BS のみ・地域限定の地上波・有料ネット配信・未確認・開始時刻不明・複数日開催・海外開催（日本時間で日付が変わる）・複数枠・公式に配信なし・過去大会の参考情報・下書きの例を含みます。
 
-## Docker（本番用イメージ）
+## AWS（S3 + CloudFront）へのデプロイ
 
-`Dockerfile` はマルチステージ構成で、ターゲットは 3 つあります。どれも非 root ユーザー（`node`）で動きます。秘密情報はイメージに含めず、実行時に環境変数で渡します。
-
-```bash
-# Web アプリ（Next.js standalone）
-docker build --target runner -t miruriku-web:local .
-docker run --rm -p 3001:3000 --network miruriku_default \
-  -e DATABASE_URL="postgresql://miruriku:miruriku@db:5432/miruriku?schema=public" \
-  miruriku-web:local
-# → http://localhost:3001 （本番モードなので /admin は常に 404）
-
-# マイグレーション（デプロイ前に 1 回だけ実行するタスク）
-docker build --target migrate -t miruriku-migrate:local .
-docker run --rm --network miruriku_default \
-  -e DATABASE_URL="postgresql://miruriku:miruriku@db:5432/miruriku?schema=public" \
-  miruriku-migrate:local
-
-# 収集 CLI（1 回だけ実行するタスク。引数は pnpm collect と同じ）
-docker build --target collector -t miruriku-collector:local .
-docker run --rm --network miruriku_default \
-  -e DATABASE_URL="postgresql://miruriku:miruriku@db:5432/miruriku?schema=public" \
-  miruriku-collector:local --event <slug> --fetch http --provider rule-based
-```
-
-- `--network miruriku_default` は docker compose が作るネットワークです。コンテナからは `db:5432` で DB に接続できます。
-- ビルド中に DB へは接続しません。マイグレーションもビルド中には実行しません。
-- Web サーバーの中では定期処理を動かしません。収集とマイグレーションは、別のタスクとして起動します。
-
-## AWS（Lightsail）へのデプロイ
-
-WSL から AWS CLI と SSH だけで、Lightsail のインスタンス 1 台（月 12 USD ほど）にデプロイできます。手順・費用・運用コマンドは [docs/deploy.md](docs/deploy.md) を参照してください。
+WSL から 1 コマンドで、静的ビルド・AWS リソースの作成（初回のみ、確認あり）・アップロード・確認・DNS の切り替え（初回のみ、確認あり）まで行います。費用は月 0.1〜0.4 USD ほどの見込みです。手順は [docs/deploy.md](docs/deploy.md) を参照してください。
 
 ```bash
-cp deploy/.env.example deploy/.env   # AWS プロファイル・リージョン・ドメインを設定
-./deploy/provision.sh                # Lightsail のリソースを作成（料金が発生します）
-./deploy/deploy.sh                   # コミット済みの HEAD をデプロイ
-./deploy/destroy.sh                  # 削除して課金を止める
+cp deploy/.env.example deploy/.env   # AWS プロファイルとドメイン（DOMAIN）を設定
+./deploy/static/deploy.sh            # コミット済みの HEAD を静的ビルドしてデプロイ
 ```
 
-本番では管理画面は常に無効です（/admin は 404）。
+## 管理画面を公開する前に必要な作業
 
-## AWS などで公開する前に必要な作業
+管理画面や収集を本番で動かす場合は、最低限、次の作業が必要です。
 
-構成の概要は [docs/design.md](docs/design.md#4-将来の-aws-構成概要今回は-iac-なし) にあります。最低限、次の作業が必要です。
-
-1. **管理者の認証・認可の設計と実装**（方式・権限・監査ログ）。これが終わるまで、管理機能を本番で有効にしないでください。
+1. **管理者の認証・認可の設計と実装**（方式・権限・監査ログ）。これが終わるまで、管理画面を公開しないでください。
 2. 情報源ごとの利用規約・robots.txt・著作権の確認と、取得頻度のルール作り
-3. 情報を確認する運用体制（担当者・頻度・訂正の手順・問い合わせ窓口）
-4. インフラの用意: ECS Fargate（Web・収集・マイグレーション）、RDS for PostgreSQL、Secrets Manager / SSM、CloudWatch、CloudFront。あわせて IaC 化
-5. 監視・アラート、バックアップとリストアの手順
-6. 複数台で動かすための設定（`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`・`deploymentId`）と、DB を含めた準備完了チェック（死活監視の `/api/health` は用意済み）
-7. 費用の見積もり。LLM を使う場合は、その可否と費用の判断
+3. DB とサーバー（または定期実行の仕組み）の用意、監視・バックアップ。将来構成の概要は [docs/design.md](docs/design.md#4-将来の-aws-構成概要今回は-iac-なし) にあります
 
 ## 既知の制約
 
@@ -285,10 +253,11 @@ cp deploy/.env.example deploy/.env   # AWS プロファイル・リージョン�
 - 実在の公式ページの多くは番組表形式（放送日・番組名・地域が別の行）やロゴ画像で局名を示すため、ルールベース抽出ではほとんど取り出せません。JavaScript で描画されるページ（例: テレビ朝日の全日本大学駅伝サイト）は本文を取得できません。
 - 表示は日本時間・日本語だけに対応しています。
 - 日本からの視聴可否は、情報源の記載に頼っています。地域制限などを自動で判定することはしません。
-- pnpm 12 は、公開から 24 時間たっていない依存（`minimumReleaseAge`）を含む lockfile をクリーンな環境にインストールしようとすると失敗します。依存を更新した直後は CI や Docker のビルドが失敗することがあります（このため dotenv は 18.0.6 に固定しています）。
-- 一覧は、近い期間の公開大会をすべて取得してからアプリ側で絞り込みます（ページ送りなし）。データが少ない前提の作りです。
-- JavaScript が無効だと、一覧と詳細の本文は読み込み中の表示のままです（Suspense のストリーミングで本文を差し込むため）。絞り込みフォームの送信自体は JavaScript なしでも動きます。
-- 大会詳細の 404 判定のため、詳細ページへのリクエストごとに Proxy で軽い DB クエリを 1 回実行します。管理画面で存在しないレコードを開いた場合は、「見つかりません」画面を表示しますが HTTP ステータスは 200 です。
+- pnpm 12 は、公開から 24 時間たっていない依存（`minimumReleaseAge`）を含む lockfile をクリーンな環境にインストールしようとすると失敗します。依存を更新した直後は CI やデプロイのビルドが失敗することがあります（このため dotenv は 18.0.6 に固定しています）。
+- 一覧は、公開中の大会をすべてページに埋め込み、ブラウザで絞り込みます（ページ送りなし）。データが少ない前提の作りです。
+- 公開サイトはビルドした時点のデータです。データを直したら再デプロイが必要です。
+- JavaScript が無効だと、一覧はビルド時点の「これから開催される大会」を表示し、絞り込みはできません（その旨を表示します）。大会詳細は JavaScript なしでも読めます。
+- 管理画面で存在しないレコードを開いた場合は、「見つかりません」画面を表示しますが HTTP ステータスは 200 です。
 - ルールベース抽出は「1 行に 1 枠」の書式だけを解析します。表形式や、局名と日時が別の行にあるページ、JavaScript で描画されるページは扱えません。抽出しなかった情報は人が補う前提です。
 - 管理画面では大会・シリーズを削除できません。放送枠のフォームでは、24 時間を超える放送や、開始時刻なしで終了時刻だけがある枠を表せません。
 - 表示はライトモードのみです。

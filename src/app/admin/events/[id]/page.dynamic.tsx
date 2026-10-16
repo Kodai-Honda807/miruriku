@@ -37,10 +37,11 @@ import { deleteSourceAction } from "@/server/admin/actions/sources";
 import { getAdminEvent, listSeriesOptions, type AdminEvent } from "@/server/admin/queries";
 import { adminIdSchema } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../../page-props";
 
 export const metadata: Metadata = { title: "大会の編集" };
 
-export default function EditEventPage({ params, searchParams }: PageProps<"/admin/events/[id]">) {
+export default function EditEventPage({ params, searchParams }: AdminPageProps<{ id: string }>) {
   if (!isAdminEnabled()) notFound();
   return (
     <Suspense fallback={<EditorSkeleton />}>
@@ -58,7 +59,7 @@ function EditorSkeleton() {
   );
 }
 
-async function EventEditor({ params, searchParams }: PageProps<"/admin/events/[id]">) {
+async function EventEditor({ params, searchParams }: AdminPageProps<{ id: string }>) {
   const { id } = await params;
   const { notice } = await searchParams;
   await connection();

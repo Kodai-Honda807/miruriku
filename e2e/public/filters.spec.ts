@@ -1,21 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-import { eventCards, visibleSlugs } from "../support/locators";
+import { eventCards, gotoHome, visibleSlugs } from "../support/locators";
 
 test.describe("絞り込み", () => {
   test("期間「今日」で今日の大会だけになり、URL に保持される", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await page.getByRole("radio", { name: "今日" }).check();
     await expect(page).toHaveURL(/period=today/);
     await expect.poll(() => visibleSlugs(page)).toEqual(["demo-bay-ekiden", "demo-track-night"]);
 
     await page.reload();
+    await expect(page.locator('[data-filters-ready="true"]')).toBeAttached();
     await expect(page.getByRole("radio", { name: "今日" })).toBeChecked();
     await expect.poll(() => visibleSlugs(page)).toEqual(["demo-bay-ekiden", "demo-track-night"]);
   });
 
   test("期間「今週（7日間）」は今日から 7 日間", async ({ page }) => {
-    await page.goto("/?period=week");
+    await gotoHome(page, "/?period=week");
     await expect(eventCards(page).first()).toBeVisible();
     const slugs = await visibleSlugs(page);
     expect(slugs).toContain("demo-10000m-night"); // 10/16
@@ -24,7 +25,7 @@ test.describe("絞り込み", () => {
   });
 
   test("絞り込みダイアログで競技と視聴方法を選び、「適用」でまとめて反映する", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await expect(eventCards(page).first()).toBeVisible();
     const initialSlugs = await visibleSlugs(page);
 
@@ -49,7 +50,7 @@ test.describe("絞り込み", () => {
     await expect(page.getByRole("button", { name: /^絞り込み\s*（2件適用中）$/ })).toBeVisible();
 
     // URL を直接開いても同じ結果（フィルタ状態を URL に保持）
-    await page.goto("/?category=ekiden&medium=terrestrial");
+    await gotoHome(page, "/?category=ekiden&medium=terrestrial");
     await expect.poll(() => visibleSlugs(page)).toEqual(["demo-bay-ekiden", "demo-prefecture-ekiden"]);
     await page.getByRole("link", { name: "「地上波」の条件を外す" }).click();
     await expect(page).not.toHaveURL(/medium=/);
@@ -58,7 +59,7 @@ test.describe("絞り込み", () => {
   });
 
   test("「キャンセル」と Esc では変更を破棄し、絞り込みボタンにフォーカスが戻る", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await expect(eventCards(page).first()).toBeVisible();
     const trigger = page.getByRole("button", { name: /^絞り込み/ });
     const dialog = page.getByRole("dialog", { name: "絞り込み" });
@@ -85,7 +86,7 @@ test.describe("絞り込み", () => {
   });
 
   test("無料ネット配信ありで絞り込める（有料・料金不明・過去の参考情報は含めない）", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await page.getByRole("button", { name: /^絞り込み/ }).click();
     const dialog = page.getByRole("dialog", { name: "絞り込み" });
     await dialog.getByRole("checkbox", { name: "無料ネット配信あり" }).check();
@@ -97,13 +98,13 @@ test.describe("絞り込み", () => {
   });
 
   test("大会名で検索でき、該当なしの表示がある", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await page.getByLabel("大会名で検索").fill("湾岸");
     await page.getByRole("button", { name: "検索" }).click();
     await expect(page).toHaveURL(/q=/);
     await expect.poll(() => visibleSlugs(page)).toEqual(["demo-bay-ekiden"]);
 
-    await page.goto("/?q=" + encodeURIComponent("存在しない大会名"));
+    await gotoHome(page, "/?q=" + encodeURIComponent("存在しない大会名"));
     await expect(page.getByText("条件に合う大会はありません")).toBeVisible();
     await expect(eventCards(page)).toHaveCount(0);
   });

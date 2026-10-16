@@ -11,6 +11,7 @@ import { EXTRACTION_PROVIDER_KIND_LABELS, FETCH_MODE_LABELS } from "@/domain/lab
 import { countCandidatesByStatus, listCandidates } from "@/server/admin/queries";
 import { parseCandidateListFilter, type CandidateListFilter } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../page-props";
 
 export const metadata: Metadata = { title: "収集候補" };
 
@@ -21,13 +22,13 @@ const FILTER_LABELS: Record<CandidateListFilter, string> = {
   all: "すべて",
 };
 
-export default function CandidatesPage({ searchParams }: PageProps<"/admin/candidates">) {
+export default function CandidatesPage({ searchParams }: AdminPageProps) {
   if (!isAdminEnabled()) notFound();
   return (
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">収集候補</h1>
       <p className="text-sm text-muted-foreground">
-        収集 CLI が情報源から抽出した候補です。人が内容を確認して承認するまで、公開データには反映されません。
+        収集 CLI が情報源から抽出した候補です。人が内容を確認して承認するまで、DB には反映されません（公開サイトは data/real-events.ts から作るため、承認しても変わりません）。
       </p>
       <Suspense fallback={<Skeleton className="h-64" />}>
         <CandidateList searchParams={searchParams} />
@@ -36,7 +37,7 @@ export default function CandidatesPage({ searchParams }: PageProps<"/admin/candi
   );
 }
 
-async function CandidateList({ searchParams }: Pick<PageProps<"/admin/candidates">, "searchParams">) {
+async function CandidateList({ searchParams }: Pick<AdminPageProps, "searchParams">) {
   const { status } = await searchParams;
   await connection();
   const filter = parseCandidateListFilter(status);

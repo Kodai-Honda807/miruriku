@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getNow } from "./clock";
+import { getFixedNow, getNow } from "./clock";
 
 const REAL_NOW = new Date("2030-01-02T03:04:05.000Z");
 
@@ -55,5 +55,25 @@ describe("getNow", () => {
     const a = getNow(env);
     a.setUTCFullYear(1999);
     expect(getNow(env).toISOString()).toBe("2026-10-10T00:00:00.000Z");
+  });
+
+  it("NEXT_PUBLIC_MIRURIKU_FIXED_NOW は本番ビルド（静的ビルドの E2E 用）でも有効", () => {
+    const fixed = "2026-10-10T12:00:00+09:00";
+    expect(getNow({ NODE_ENV: "production", NEXT_PUBLIC_MIRURIKU_FIXED_NOW: fixed }).toISOString()).toBe(
+      "2026-10-10T03:00:00.000Z",
+    );
+    // 両方あれば NEXT_PUBLIC_ を優先する（ビルド時の描画とブラウザで同じ時刻にするため）
+    expect(
+      getNow({ NODE_ENV: "development", MIRURIKU_FIXED_NOW: "2030-01-01T00:00:00Z", NEXT_PUBLIC_MIRURIKU_FIXED_NOW: fixed }),
+    ).toEqual(new Date(fixed));
+    expect(getNow({ NODE_ENV: "production", NEXT_PUBLIC_MIRURIKU_FIXED_NOW: "not-a-date" })).toEqual(REAL_NOW);
+  });
+
+  it("getFixedNow は固定されていなければ null", () => {
+    expect(getFixedNow({ NODE_ENV: "production" })).toBeNull();
+    expect(getFixedNow({ NODE_ENV: "production", MIRURIKU_FIXED_NOW: "2026-10-10T00:00:00Z" })).toBeNull();
+    expect(getFixedNow({ NODE_ENV: "development", MIRURIKU_FIXED_NOW: "2026-10-10T00:00:00Z" })).toEqual(
+      new Date("2026-10-10T00:00:00Z"),
+    );
   });
 });

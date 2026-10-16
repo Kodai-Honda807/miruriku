@@ -53,5 +53,8 @@ next-env.d.ts
 # next dev の出力先を分けた場合（NEXT_DIST_DIR）
 /.next-*/
 
+# E2E 用の静的ビルドと公開データ（e2e/prepare.ts）
+/.e2e/
+
 # デプロイ: 手元に保存した DB のダンプ（deploy/ops.sh backup）
 /deploy/backups/

@@ -65,7 +65,7 @@ export const HELP_TEXT = `みる陸 収集 CLI — 登録済みの情報源か�
   pnpm collect --event demo-city-marathon --fetch fixture --dry-run
 
 注意:
-  - 作成した候補は管理画面で人が確認・承認するまで公開データに反映されません。
+  - 作成した候補は管理画面で人が確認・承認するまで DB に反映されません（公開サイトは data/real-events.ts から作ります）。
   - 情報源の利用条件（利用規約・転載可否など）の確認は、情報源を登録・許可する人が行ってください。
   - 環境変数 COLLECTOR_USER_AGENT で User-Agent を指定できます（連絡先を含めることを推奨）。
   - 失敗があった場合の終了コードは 1 です。`;
@@ -396,7 +396,7 @@ export async function runCollectCli(argv: readonly string[], deps: CliDeps = {})
       `まとめ: 成功 ${count("SUCCEEDED")} 件（候補を作成 ${created} 件、同内容のため作成せず ${duplicates} 件、抽出結果なし ${nothing} 件）、失敗 ${count("FAILED")} 件、取得せず ${count("SKIPPED")} 件、実行せず ${count("REJECTED")} 件`,
     );
     if (!options.dryRun && created > 0) {
-      io.out("候補は管理画面で人が確認・承認するまで公開データには反映されません。");
+      io.out("候補は管理画面で人が確認・承認するまで DB には反映されません（公開サイトは data/real-events.ts から作ります）。");
     }
     return count("FAILED") + count("REJECTED") > 0 ? 1 : 0;
   } catch (error) {

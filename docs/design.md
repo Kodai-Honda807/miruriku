@@ -98,7 +98,7 @@
 5. **抽出**: 抽出プロバイダ（`rule-based` / `fixture`）が、構造化した抽出結果を返します。LLM プロバイダはインターフェースだけを用意しています（今回は実装しません）。
 6. **検証・正規化**: `extractionResultSchema`（Zod、`strictObject`）で検証します。想定外のキー、http(s) 以外の URL、不正な日付・時刻、矛盾する指定（例: 放送なしなのに放送枠がある）、件数の上限超えは拒否します。そのうえで、放送時刻は日本時間、大会の時刻は開催地のタイムゾーンとして解釈し、UTC の瞬間に変換します（`src/domain/candidate.ts`）。
 7. **差分計算と候補の保存**: 現在の大会情報との差分を計算し、`ExtractionCandidate`（`PENDING`）として保存します。候補で不明な値は既存の値を上書きしません。候補に含まれない既存の枠も削除しません。**この時点では公開データを一切変えません。**
-8. **人によるレビューと公開**: 管理画面（`/admin/candidates`）で差分を確認し、承認または却下します。承認すると、トランザクションの中で大会と枠を更新・作成し、公開ページに反映されます。
+8. **人によるレビュー**: ローカルの管理画面（`/admin/candidates`）で差分を確認し、承認または却下します。承認すると、トランザクションの中で DB の大会と枠を更新・作成します。公開サイトに載せるには、出典を確かめて `data/real-events.ts` を直し、デプロイします。
 
 ### 安全対策
 
@@ -125,9 +125,9 @@
 
 | 技術 | 採用バージョン | 理由・注意点 |
 | --- | --- | --- |
-| Node.js | 24 LTS（`>=24.13.0 <25`、`.nvmrc` = 24） | 現行の LTS。Docker イメージは `node:24.21.0-bookworm-slim` |
+| Node.js | 24 LTS（`>=24.13.0 <25`、`.nvmrc` = 24） | 現行の LTS |
 | pnpm | 12.10.1（`packageManager`、corepack で取得） | `allowBuilds` でビルドスクリプトを許可制にしている。既定の `minimumReleaseAge`（公開後 24 時間）を満たさない依存はクリーンな環境でのインストールに失敗する |
-| Next.js | 16.4.0（App Router） | `cacheComponents` と `partialPrefetching` を有効にし、`output: "standalone"` で出力 |
+| Next.js | 16.4.0（App Router） | 公開サイトは `output: "export"`（静的書き出し）。管理画面は開発サーバーだけ |
 | React | 19.3.0 | Next.js 16.4 に合わせる |
 | TypeScript | 5.9.3（strict） | typescript-eslint 8.71 が TS 6.1 未満にしか対応していないため 7.x は使わない。create-next-app 16.4 の選定に合わせる |
 | Tailwind CSS / shadcn/ui | 4.3 / radix-nova | 状態は色だけで伝えず、必ずテキストのラベルを付ける |
@@ -138,19 +138,20 @@
 | Playwright | 1.64.0 | E2E テスト |
 | ESLint | 9.39.5 | v9 は EOL と表示されているが、eslint-config-next 16.4 に同梱の react / jsx-a11y / import プラグインが ESLint 10 に対応していないため v9 を使う |
 
-### cacheComponents を使ううえでの注意
+### 静的書き出し（公開サイト）
 
-- **DB の読み取り結果はキャッシュしません。** `use cache` は付けず、`<Suspense>` の内側で、リクエストのたびに動的に実行します。放送情報の訂正をすぐ反映するためです。
-- 現在時刻（`getNow()`）や DB アクセスは、`connection()` などでリクエスト時の処理にしたうえで `<Suspense>` の内側で使います。ビルド時に作る静的な部分（App Shell）に、日付やデータを含めないようにするためです。
-- **ビルド時に DB は不要です。** Prisma Client は最初に呼び出されたときに作ります（`src/server/db.ts`）。CI でも `DATABASE_URL` を設定せずに `pnpm build` が通ることを確認します。
-- `partialPrefetching` を有効にすると、リンクの先読みではルートごとの App Shell だけを取得します。URL ごとに変わるデータは、画面を移動した後に取得します。
-- `use cache` / `cacheLife` は使っていません（DB の読み取り結果をキャッシュしないため）。
-- 大会詳細は `<Suspense>` の内側で `notFound()` するため、その時点では 200 でストリーミングが始まっています（Next.js の仕様）。下書き・存在しない大会を HTTP 404 にするため、Proxy（Node.js ランタイム）で slug が公開中の大会かを軽く確認し、該当しなければ not-found ページに rewrite します（`src/proxy.ts`）。DB に接続できないときは判定せずにページ側のエラー表示に任せます。大会詳細へのリクエストごとに、一意インデックスを使うクエリが 1 回増えます。
-- `/api/health` は DB に依存しない死活監視用のエンドポイントです（Docker の HEALTHCHECK と E2E の起動待ちで使用）。
+- 公開サイトは `output: "export"` で静的ファイルに書き出し、S3 + CloudFront で配信します（[docs/deploy.md](deploy.md)）。ビルド時に DB は使いません。
+- 公開データはビルド時に `data/real-events.ts` から作ります（`src/server/public-data/`）。DB に反映して公開用クエリで読んだ結果と同じになることを、DB 統合テストで確かめています。E2E だけは、デモデータを入れた DB から書き出した JSON（`MIRURIKU_PUBLIC_DATA_FILE`）を使います。
+- 一覧はビルド時に公開中の大会を埋め込み、絞り込み（URL のクエリ）と「今日」「開催中」などの判定をブラウザで行います。ビルド時の HTML は既定の条件・ビルド時刻の一覧で、JavaScript なしでも読めます。
+- 大会詳細は `generateStaticParams` で公開中の大会だけを書き出し、`dynamicParams = false` でそれ以外を 404 にします。URL は末尾スラッシュ付き（`trailingSlash: true`）で、CloudFront Functions が `index.html` への書き換えとスラッシュなしの URL の転送を行います。
+- 管理画面・Server Actions・Proxy・`/api/health` は `*.dynamic.tsx` / `*.dynamic.ts` という名前にし、開発サーバーのときだけ `pageExtensions` に含めます（`next.config.ts`）。静的書き出しと両立しないため、`cacheComponents` と `partialPrefetching` は使っていません。
+- `next typegen` は `page.tsx` という名前のファイルにしかルート型を作らないため、管理画面のページの props の型は `src/app/admin/page-props.ts` で明示しています。
 
 ---
 
 ## 4. 将来の AWS 構成（概要。今回は IaC なし）
+
+> 現在の公開サイトは静的配信（S3 + CloudFront、[docs/deploy.md](deploy.md)）です。以下は、管理画面や定期収集を本番で動かす必要が出た場合の構成案です（Dockerfile は静的配信への移行で削除しました）。
 
 ```
 利用者 ─ CloudFront ─ ALB ─ ECS Fargate（Web: runner イメージ）─ RDS for PostgreSQL

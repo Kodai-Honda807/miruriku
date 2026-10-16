@@ -12,10 +12,11 @@ import { createSlotAction } from "@/server/admin/actions/slots";
 import { getEventForSlotForm } from "@/server/admin/queries";
 import { adminIdSchema } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../../../../page-props";
 
 export const metadata: Metadata = { title: "放送・配信枠を追加" };
 
-export default function NewSlotPage({ params }: PageProps<"/admin/events/[id]/slots/new">) {
+export default function NewSlotPage({ params }: AdminPageProps<{ id: string }>) {
   if (!isAdminEnabled()) notFound();
   return (
     <Suspense fallback={<Skeleton className="h-96" />}>
@@ -24,7 +25,7 @@ export default function NewSlotPage({ params }: PageProps<"/admin/events/[id]/sl
   );
 }
 
-async function NewSlot({ params }: Pick<PageProps<"/admin/events/[id]/slots/new">, "params">) {
+async function NewSlot({ params }: Pick<AdminPageProps<{ id: string }>, "params">) {
   const { id } = await params;
   await connection();
   if (!adminIdSchema.safeParse(id).success) notFound();

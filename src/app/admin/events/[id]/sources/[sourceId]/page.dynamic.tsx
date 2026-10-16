@@ -12,10 +12,11 @@ import { updateSourceAction } from "@/server/admin/actions/sources";
 import { getEventForSlotForm, getSource } from "@/server/admin/queries";
 import { adminIdSchema } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../../../../page-props";
 
 export const metadata: Metadata = { title: "情報源の編集" };
 
-export default function EditSourcePage({ params }: PageProps<"/admin/events/[id]/sources/[sourceId]">) {
+export default function EditSourcePage({ params }: AdminPageProps<{ id: string; sourceId: string }>) {
   if (!isAdminEnabled()) notFound();
   return (
     <Suspense fallback={<Skeleton className="h-64" />}>
@@ -24,7 +25,7 @@ export default function EditSourcePage({ params }: PageProps<"/admin/events/[id]
   );
 }
 
-async function EditSource({ params }: Pick<PageProps<"/admin/events/[id]/sources/[sourceId]">, "params">) {
+async function EditSource({ params }: Pick<AdminPageProps<{ id: string; sourceId: string }>, "params">) {
   const { id, sourceId } = await params;
   await connection();
   if (!adminIdSchema.safeParse(id).success || !adminIdSchema.safeParse(sourceId).success) notFound();

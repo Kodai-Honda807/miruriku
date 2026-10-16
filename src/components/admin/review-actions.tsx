@@ -18,7 +18,7 @@ type ReviewActionsProps = {
   canApprove: boolean;
 };
 
-/** 未レビューの候補の「承認して公開データに反映」「却下する」ボタン */
+/** 未レビューの候補の「承認して DB に反映」「却下する」ボタン */
 export function ReviewActions({ approveAction, rejectAction, canApprove }: ReviewActionsProps) {
   const [approveState, approveFormAction, approvePending] = useActionState(approveAction, initialFormState);
   const [rejectState, rejectFormAction, rejectPending] = useActionState(rejectAction, initialFormState);
@@ -29,14 +29,15 @@ export function ReviewActions({ approveAction, rejectAction, canApprove }: Revie
     <div className="grid gap-6 md:grid-cols-2">
       <form action={approveFormAction} className="grid content-start gap-3 rounded-lg border p-4" aria-label="承認">
         <p className="text-sm text-muted-foreground">
-          承認すると、上の差分（現在のデータに対して承認時にもう一度計算します）が公開データに反映されます。
+          承認すると、上の差分（現在のデータに対して承認時にもう一度計算します）がこの DB に反映されます。
+          公開サイトには反映されません。公開するには、出典を確かめて data/real-events.ts を直し、デプロイしてください。
           追加・更新する放送枠は「公開」「確認済み」になり、確認日時が現在時刻になります。
           大会の公開状態（下書き／公開）は変わりません。
         </p>
         <FormMessage state={approveState} />
         <div className="flex items-center gap-3">
           <Button type="submit" disabled={busy || !canApprove} aria-busy={approvePending || undefined}>
-            承認して公開データに反映
+            承認して DB に反映
           </Button>
           {approvePending ? (
             <span role="status" className="text-sm text-muted-foreground">

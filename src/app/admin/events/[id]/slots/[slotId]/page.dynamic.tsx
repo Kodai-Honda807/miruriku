@@ -13,10 +13,11 @@ import { updateSlotAction } from "@/server/admin/actions/slots";
 import { getEventForSlotForm, getSlot } from "@/server/admin/queries";
 import { adminIdSchema } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../../../../page-props";
 
 export const metadata: Metadata = { title: "放送・配信枠の編集" };
 
-export default function EditSlotPage({ params }: PageProps<"/admin/events/[id]/slots/[slotId]">) {
+export default function EditSlotPage({ params }: AdminPageProps<{ id: string; slotId: string }>) {
   if (!isAdminEnabled()) notFound();
   return (
     <Suspense fallback={<Skeleton className="h-96" />}>
@@ -25,7 +26,7 @@ export default function EditSlotPage({ params }: PageProps<"/admin/events/[id]/s
   );
 }
 
-async function EditSlot({ params }: Pick<PageProps<"/admin/events/[id]/slots/[slotId]">, "params">) {
+async function EditSlot({ params }: Pick<AdminPageProps<{ id: string; slotId: string }>, "params">) {
   const { id, slotId } = await params;
   await connection();
   if (!adminIdSchema.safeParse(id).success || !adminIdSchema.safeParse(slotId).success) notFound();
