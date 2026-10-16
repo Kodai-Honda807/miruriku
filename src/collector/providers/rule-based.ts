@@ -264,7 +264,33 @@ function cleanProviderCandidate(raw: string): string {
   t = t.replace(/(?:にて|で)(?:放送|配信|中継)(?:します|いたします|致します|予定)?$/, "");
   t = t.replace(/(?:にて|で|より)$/, "");
   t = t.replace(/[(（]\s*予定\s*[)）]$/, "");
+  t = unwrapQuotedProvider(t.trim());
   return t.trim();
+}
+
+/**
+ * かぎ括弧を含む候補から、放送局・サービス名の部分だけを取り出す（実ページで見られた形への対応）。
+ * - 「スタート直前から「TVer（ティーバー）」」→ 括弧の後ろが空なので括弧の中身「TVer（ティーバー）」
+ * - 「「東京レガシーハーフマラソン2026」YouTube」→ 括弧の中身は大会名なので、括弧の後ろ「YouTube」
+ * 括弧が 1 組でない場合は手を加えない（isPlausibleProviderName で除外される）。
+ */
+function unwrapQuotedProvider(t: string): string {
+  const m = /^(.*?)[「｢『]([^「」｢｣『』]{1,40})[」｣』](.*)$/.exec(t);
+  if (!m || /[「」｢｣『』]/.test(m[1] + m[3])) return t;
+  const after = m[3].trim();
+  return after ? after : m[2].trim();
+}
+
+/** 日付見出しとして受け付ける範囲（大会初日の 7 日前〜最終日の 60 日後）。再放送・完全版は大会後になり得る */
+const AIR_DATE_HEADING_DAYS_BEFORE = 7;
+const AIR_DATE_HEADING_DAYS_AFTER = 60;
+
+function isPlausibleAirDate(date: LocalDate, input: ExtractionInput): boolean {
+  const d = dayNumber(date);
+  return (
+    d >= dayNumber(input.event.startDate) - AIR_DATE_HEADING_DAYS_BEFORE &&
+    d <= dayNumber(input.event.endDate) + AIR_DATE_HEADING_DAYS_AFTER
+  );
 }
 
 function isPlausibleProviderName(name: string): boolean {
@@ -272,6 +298,11 @@ function isPlausibleProviderName(name: string): boolean {
   if (!/\p{L}/u.test(name)) return false;
   if (/^[(（][^)）]*[)）]$/.test(name)) return false;
   if (/[。]/.test(name) || /https?:/i.test(name)) return false;
+  // 文章の断片・パンくず・宣伝文は放送局名ではない（実ページの検証で誤抽出されたもの）
+  if (/[！!？?＞>「」｢｣『』]/.test(name)) return false;
+  if (/[、，,]/.test(name) && name.length > 20) return false;
+  if (/(?:しました|します|いたします|ください|決定|です|ます)$/.test(name)) return false;
+  if (/こちら|(?:は|を|に|が|うえ|ので|ため)$/.test(name)) return false;
   if (GENERIC_PROVIDER_RE.test(toHalfWidth(name))) return false;
   if (NON_PROVIDER_PHRASE_RE.test(name)) return false;
   return true;
@@ -339,7 +370,10 @@ function parseLine(line: string, ctx: LineContext, input: ExtractionInput): Line
       Number(dateHeading[3]),
       eventStart,
     );
-    if (date) return { kind: "date-heading", date };
+    // 大会日から大きく離れた日付だけの行は、記事の公開日・更新日など放送日ではない可能性が高い。
+    // 放送日の文脈として使わない（実ページで公開日を放送日と誤認したため）
+    if (date && isPlausibleAirDate(date, input)) return { kind: "date-heading", date };
+    if (date) return { kind: "other" };
   }
 
   // URL（「視聴ページ: URL」のように明示されたものだけを視聴 URL にする）

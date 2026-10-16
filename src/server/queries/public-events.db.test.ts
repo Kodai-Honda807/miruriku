@@ -50,6 +50,7 @@ const BROADCAST_KEYS = [
   "providerName",
   "region",
   "regionNote",
+  "source",
   "startAt",
   "verificationStatus",
   "verifiedAt",
@@ -171,6 +172,8 @@ describe("listPublicEventsFrom", () => {
     });
     expect(tv.startAt).toEqual(zonedToUtc("2026-10-10", "07:50", JST));
     expect(tv.endAt).toEqual(zonedToUtc("2026-10-10", "14:00", JST));
+    // 出典は URL と表示名だけを返す（情報源の内部項目は返さない）
+    expect(tv.source === null || Object.keys(tv.source).sort().join(",") === "title,url").toBe(true);
   });
 
   it("開始時刻不明・海外開催・未確認の枠をそのまま返す", async () => {

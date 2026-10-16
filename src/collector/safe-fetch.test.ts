@@ -9,7 +9,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createGuardedLookup, type ResolveAll } from "./dns-guard";
 import { CollectorError } from "./errors";
-import { createSafeAgent, parseContentType, safeFetch, type SafeFetchOptions } from "./safe-fetch";
+import { Readable } from "node:stream";
+
+import { createSafeAgent, discardBody, parseContentType, safeFetch, type SafeFetchOptions } from "./safe-fetch";
 
 const PUBLIC_IP = "93.184.215.14";
 const publicResolve: ResolveAll = async () => [{ address: PUBLIC_IP, family: 4 }];
@@ -352,5 +354,20 @@ describe("接続時の名前解決の検査（DNS リバインディング対策
     } finally {
       await realAgent.close();
     }
+  });
+});
+
+describe("discardBody", () => {
+  it("破棄時に発生する 'error' イベントでプロセスを落とさない（実サイトの 404 robots.txt で発生した不具合の回帰テスト）", async () => {
+    const body = new Readable({ read() {} });
+    // undici の BodyReadable と同じく、destroy 時にエラーを発行するストリーム
+    body._destroy = (_err, cb) => cb(new Error("Request aborted"));
+    const unhandled = vi.fn();
+    process.once("uncaughtException", unhandled);
+    discardBody(body as unknown as Parameters<typeof discardBody>[0]);
+    await new Promise((resolve) => setImmediate(resolve));
+    process.removeListener("uncaughtException", unhandled);
+    expect(unhandled).not.toHaveBeenCalled();
+    expect(body.destroyed).toBe(true);
   });
 });

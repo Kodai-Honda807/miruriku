@@ -6,6 +6,7 @@ import {
   computeCandidateDiff,
   eventUpdateFromChanges,
   proposedBroadcastInfoStatus,
+  providerBaseName,
   slotFieldsFromProposed,
   slotUpdateFromChanges,
   toCurrentSlotState,
@@ -385,5 +386,70 @@ describe("computeCandidateDiff: 統合時に決めた仕様", () => {
     );
     expect(diff.slots.map((s) => s.kind)).toEqual(["add"]);
     expect(diff.untouchedSlots.map((s) => s.slotId)).toEqual(["slot-past"]);
+  });
+});
+
+describe("確認済みの大会の格下げ防止", () => {
+  it("確認済みの大会に「未発表」の候補が来ても、放送情報の状態の変更を提案しない", () => {
+    const diff = computeCandidateDiff(
+      currentEvent({ broadcastInfoStatus: "CONFIRMED" }),
+      candidate({ broadcastStatus: "NOT_ANNOUNCED", broadcasts: [] }),
+    );
+    expect(diff.eventChanges.find((c) => c.field === "broadcastInfoStatus")).toBeUndefined();
+  });
+
+  it("未確認の大会には「未発表」を提案する", () => {
+    const diff = computeCandidateDiff(
+      currentEvent({ broadcastInfoStatus: "UNVERIFIED" }),
+      candidate({ broadcastStatus: "NOT_ANNOUNCED", broadcasts: [] }),
+    );
+    expect(diff.eventChanges).toContainEqual({ field: "broadcastInfoStatus", before: "UNVERIFIED", after: "NOT_ANNOUNCED" });
+  });
+
+  it("確認済みの大会でも「放送・配信なし」の公式案内は提案する（人が承認するまで反映しない）", () => {
+    const diff = computeCandidateDiff(
+      currentEvent({ broadcastInfoStatus: "CONFIRMED" }),
+      candidate({ broadcastStatus: "NO_BROADCAST", broadcasts: [] }),
+    );
+    expect(diff.eventChanges).toContainEqual({ field: "broadcastInfoStatus", before: "CONFIRMED", after: "NO_BROADCAST" });
+  });
+});
+
+describe("局・サービス名の括弧書きの違い", () => {
+  it("providerBaseName は末尾の括弧書きを除き、括弧だけの名前はそのまま残す", () => {
+    expect(providerBaseName("TVer（ティーバー）")).toBe("tver");
+    expect(providerBaseName("YouTube（東京マラソン財団公式チャンネル）")).toBe("youtube");
+    expect(providerBaseName("日本テレビ（関東エリア）ほか")).toBe("日本テレビ(関東エリア)ほか");
+    expect(providerBaseName("（未定）")).toBe("(未定)");
+  });
+
+  it("括弧書きだけが違う既存枠は同じ枠とみなし、追加や名称変更を提案しない", () => {
+    const diff = computeCandidateDiff(
+      currentEvent({
+        slots: [
+          currentSlot({
+            id: "slot-tver",
+            medium: "INTERNET",
+            providerName: "TVer",
+            airDate: "2026-10-12",
+            startAt: null,
+            endAt: null,
+            cost: "FREE",
+            viewingType: "LIVE",
+            region: "NATIONWIDE",
+            infoUrl: "https://example.com/info",
+          }),
+        ],
+      }),
+      candidate({
+        broadcastStatus: "CONFIRMED",
+        broadcasts: [
+          tvBroadcast({ medium: "INTERNET", providerName: "TVer（ティーバー）", date: null, startTime: null, endTime: null, region: "UNKNOWN" }),
+        ],
+      }),
+    );
+    expect(diff.slots.filter((s) => s.kind === "add")).toHaveLength(0);
+    const changes = diff.slots.flatMap((s) => (s.kind === "update" ? s.changes : []));
+    expect(changes.find((c) => c.field === "providerName")).toBeUndefined();
   });
 });

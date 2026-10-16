@@ -25,6 +25,7 @@
     "db:seed": "prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "collect": "tsx scripts/collect.ts",
+    "data:load": "tsx scripts/load-real-events.ts",
     "setup": "pnpm db:up && pnpm db:deploy && pnpm db:seed",
     "postinstall": "prisma generate"
   },

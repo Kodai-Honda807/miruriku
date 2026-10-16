@@ -267,3 +267,50 @@ describe("rule-based: 推測で埋めない", () => {
     expect(extract(line, { endDate: "2026-10-12" }).broadcasts[0].date).toBeNull();
   });
 });
+
+describe("rule-based: 実在の公式ページで見つかった誤抽出の防止", () => {
+  // 2026-10-16 に実在の公式ページ（ニュース記事・番組ページ）を取得して検証した際の文面を、
+  // 固有名詞を伏せて再現したもの
+  const NEWS_ARTICLE = [
+    "「デモハーフマラソン2026」YouTubeライブ配信決定！",
+    "トップ ＞ ニュース ＞ 「デモハーフマラソン2026」YouTubeライブ配信決定！",
+    "2026年9月18日",
+    "｢デモハーフマラソン2026」YouTubeライブ配信決定！",
+    "2026年10月11日（日）、デモスタジアムをスタート＆フィニッシュに開催する「デモハーフマラソン2026」の模様を、デモ財団公式YouTubeチャンネルにてライブ配信することが決定しました！",
+    "デモ財団公式YouTubeチャンネルをぜひご登録のうえ、ライブ配信をお待ちください！",
+    "■ ライブ配信はこちら",
+    "※ライブ配信終了後はアーカイブもご覧いただけます。",
+  ].join("\n");
+
+  it("文章の断片・パンくず・案内文を放送局名にしない", () => {
+    const names = extract(NEWS_ARTICLE).broadcasts.map((b) => b.providerName);
+    expect(names).toEqual(["YouTube"]);
+  });
+
+  it("大会日から大きく離れた日付だけの行（記事の公開日）を放送日として使わない", () => {
+    const result = extract(NEWS_ARTICLE);
+    expect(result.broadcasts.every((b) => b.date !== "2026-09-18")).toBe(true);
+  });
+
+  it("「〜から「サービス名」」の形から、かぎ括弧の中のサービス名を取り出す", () => {
+    const result = extract("スタート直前から「TVer（ティーバー）」にて無料ライブ配信");
+    expect(result.broadcasts).toHaveLength(1);
+    expect(result.broadcasts[0]).toMatchObject({
+      medium: "INTERNET",
+      providerName: "TVer（ティーバー）",
+      cost: "FREE",
+      viewingType: "LIVE",
+      date: null,
+    });
+  });
+
+  it("日時・番組名・放送エリアが別の行に分かれた番組表形式は推測で組み立てない", () => {
+    const result = extract(
+      ["PROGRAM 放送日程", "地上波", "2026年10月11日（日）12:00～14:35", "生中継", "「デモスポーツスペシャル」", "全国28局ネット"].join(
+        "\n",
+      ),
+    );
+    expect(result.broadcasts).toEqual([]);
+    expect(result.broadcastStatus).toBe("UNKNOWN");
+  });
+});

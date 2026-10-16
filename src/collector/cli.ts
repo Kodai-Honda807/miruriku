@@ -220,7 +220,9 @@ export function formatResultLines(result: CollectSourceResult, index: number, to
 
   let summary = OUTCOME_LABELS[result.outcome];
   if (result.outcome === "SUCCEEDED") {
-    if (result.duplicateOfCandidateId) {
+    if (result.nothingExtracted) {
+      summary += " — ページから放送・配信や大会の情報を抽出できなかったため、候補は作成しませんでした（公式ページを人が確認してください）";
+    } else if (result.duplicateOfCandidateId) {
       summary += ` — 内容が前回の未レビュー候補と同じため、新しい候補は作成しませんでした（既存の候補 ID: ${result.duplicateOfCandidateId}）`;
     } else if (result.dryRun) {
       summary += " — ドライランのため候補は保存していません";
@@ -389,8 +391,9 @@ export async function runCollectCli(argv: readonly string[], deps: CliDeps = {})
     const count = (outcome: CollectSourceResult["outcome"]) => results.filter((r) => r.outcome === outcome).length;
     const created = results.filter((r) => r.candidateId).length;
     const duplicates = results.filter((r) => r.duplicateOfCandidateId).length;
+    const nothing = results.filter((r) => r.nothingExtracted).length;
     io.out(
-      `まとめ: 成功 ${count("SUCCEEDED")} 件（候補を作成 ${created} 件、同内容のため作成せず ${duplicates} 件）、失敗 ${count("FAILED")} 件、取得せず ${count("SKIPPED")} 件、実行せず ${count("REJECTED")} 件`,
+      `まとめ: 成功 ${count("SUCCEEDED")} 件（候補を作成 ${created} 件、同内容のため作成せず ${duplicates} 件、抽出結果なし ${nothing} 件）、失敗 ${count("FAILED")} 件、取得せず ${count("SKIPPED")} 件、実行せず ${count("REJECTED")} 件`,
     );
     if (!options.dryRun && created > 0) {
       io.out("候補は管理画面で人が確認・承認するまで公開データには反映されません。");

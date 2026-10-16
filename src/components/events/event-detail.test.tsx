@@ -56,7 +56,7 @@ describe("EventDetail", () => {
     expect(unverified).toHaveTextContent("確認日時: 記録なし");
   });
 
-  it("海外の複数日開催は、日程別に日本時間と現地時刻を表示し、開始時刻不明は「未定」", () => {
+  it("海外の複数日開催は、日程別に日本時間と現地時刻を表示し、開始時刻不明は「未確認」", () => {
     renderDetail({
       timezone: "Europe/Zurich",
       countryCode: "CH",
@@ -79,7 +79,7 @@ describe("EventDetail", () => {
     expect(day1).toHaveTextContent("10月17日（土）");
     expect(day1).toHaveTextContent("10月18日（日）3:00");
     expect(day1).toHaveTextContent("10月17日（土）20:00");
-    expect(day2).toHaveTextContent("未定");
+    expect(day2).toHaveTextContent("未確認");
     expect(day2.textContent).not.toMatch(/(^|[^0-9])0?0:00/);
     expect(section("開催場所")).toHaveTextContent("Europe/Zurich");
     expect(section("開催場所")).toHaveTextContent("スイス");
@@ -111,7 +111,7 @@ describe("buildEventNotes", () => {
     const notes = buildEventNotes(event, describeEventTiming(event)).join("\n");
     expect(notes).toContain("放送・配信がないという意味ではありません");
     expect(notes).toContain("今年の予定ではありません");
-    expect(notes).toContain("開始時刻は未定");
+    expect(notes).toContain("開始時刻は確認できていません");
     expect(notes).toContain("地域限定の放送があります");
     expect(notes).toContain("視聴前に必ず公式情報をご確認ください");
   });

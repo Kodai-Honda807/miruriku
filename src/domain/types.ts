@@ -35,6 +35,14 @@ export type PublicBroadcast = {
   verificationStatus: SlotVerificationStatus;
   /** 人が確認した日時 */
   verifiedAt: Date | null;
+  /** 根拠となる情報源（出典）。登録されていなければ null */
+  source: PublicSlotSource | null;
+};
+
+/** 放送枠の出典（公開してよい列のみ。情報源のメモ・収集設定は含めない） */
+export type PublicSlotSource = {
+  url: string;
+  title: string | null;
 };
 
 export type PublicEventSummary = {

@@ -63,6 +63,11 @@ export type CollectSourceResult = {
   candidateId: string | null;
   /** 同じ内容の未レビュー候補が既にあり、新しい候補を作らなかった場合のその候補 ID */
   duplicateOfCandidateId: string | null;
+  /**
+   * ページから放送・大会の情報を何も抽出できず、候補を作らなかったか。
+   * 空の候補を承認すると「確認日時」だけが更新され、実際には確認していないのに確認済みに見えるため作らない。
+   */
+  nothingExtracted: boolean;
   errorCode: CollectorErrorCode | null;
   errorMessage: string | null;
   httpStatus: number | null;
@@ -123,6 +128,7 @@ export async function collectSource(
     runId: null,
     candidateId: null,
     duplicateOfCandidateId: null,
+    nothingExtracted: false,
     errorCode: null,
     errorMessage: null,
     httpStatus: null,
@@ -284,7 +290,23 @@ export async function collectSource(
     result.extraction = parsed.data;
     result.diff = diff;
 
-    // --- 7. 候補の保存（レビュー待ち） ---
+    // --- 7. 何も抽出できなかった場合は候補を作らない（実行は成功として記録する） ---
+    const ev = parsed.data.event;
+    const nothingExtracted =
+      parsed.data.broadcastStatus === "UNKNOWN" &&
+      parsed.data.broadcasts.length === 0 &&
+      !ev.startDate &&
+      !ev.endDate &&
+      !ev.startAt &&
+      !ev.venueName &&
+      !diff.hasChanges;
+    if (nothingExtracted) {
+      result.nothingExtracted = true;
+      if (!dryRun) await finishRun("SUCCEEDED");
+      return { ...result, outcome: "SUCCEEDED" };
+    }
+
+    // --- 8. 候補の保存（レビュー待ち） ---
     if (!dryRun && runId) {
       const createdRunId = runId;
       const candidate = await db.$transaction(async (tx) => {

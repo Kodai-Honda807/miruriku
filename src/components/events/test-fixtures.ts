@@ -25,6 +25,7 @@ export function makeBroadcast(overrides: Partial<PublicBroadcast> = {}): PublicB
     infoUrl: null,
     verificationStatus: "CONFIRMED",
     verifiedAt: zonedToUtc("2026-10-08", "11:30", JST),
+    source: null,
     ...overrides,
   };
 }

@@ -17,7 +17,7 @@ function schedule(input: EventTimingInput, opts?: { withYear?: boolean }) {
 }
 
 describe("国内大会", () => {
-  it("日付のみ（開始時刻不明）は「開始時刻未定」と表示し、0:00 などの仮時刻を出さない", () => {
+  it("日付のみ（開始時刻不明）は「開始時刻未確認」と表示し、0:00 などの仮時刻を出さない", () => {
     const input: EventTimingInput = { startDate: "2026-10-13", endDate: "2026-10-13", startAt: null, timezone: JST };
     const timing = describeEventTiming(input);
     expect(timing.startTimeKnown).toBe(false);
@@ -30,7 +30,7 @@ describe("国内大会", () => {
       dateLabel: "10月13日（火）",
       dateBasisLabel: "日本時間",
       startTimeLabel: null,
-      startTimeUnknownLabel: "開始時刻未定",
+      startTimeUnknownLabel: "開始時刻未確認",
       localLabel: null,
     });
     const allText = Object.values(labels).filter(Boolean).join(" ");
@@ -118,7 +118,7 @@ describe("海外大会", () => {
     expect(labels.dateLabel).toBe("10月17日（土）");
     expect(labels.dateBasisLabel).toBe("現地日付");
     expect(labels.startTimeLabel).toBeNull();
-    expect(labels.startTimeUnknownLabel).toContain("開始時刻未定");
+    expect(labels.startTimeUnknownLabel).toContain("開始時刻未確認");
     expect(labels.startTimeUnknownLabel).toContain("日本時間の日付は変わる場合があります");
     expect(Object.values(labels).filter(Boolean).join(" ")).not.toContain("0:00");
   });
@@ -183,12 +183,12 @@ describe("formatBroadcastTiming", () => {
     expect(formatBroadcastTiming({ airDate: "2026-10-12", startAt: start, endAt: null })).toBe("10月12日（月）7:50〜");
   });
 
-  it("日付のみ（時刻未定）", () => {
-    expect(formatBroadcastTiming({ airDate: "2026-10-12", startAt: null, endAt: null })).toBe("10月12日（月）時刻未定");
+  it("日付のみ（時刻未確認）", () => {
+    expect(formatBroadcastTiming({ airDate: "2026-10-12", startAt: null, endAt: null })).toBe("10月12日（月）時刻未確認");
   });
 
-  it("日時未定", () => {
-    expect(formatBroadcastTiming({ airDate: null, startAt: null, endAt: null })).toBe("日時未定");
+  it("日時未確認", () => {
+    expect(formatBroadcastTiming({ airDate: null, startAt: null, endAt: null })).toBe("日時未確認");
   });
 
   it("放送時刻は日本時間で表示する（海外の現地時刻で指定した瞬間でも）", () => {
