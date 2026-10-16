@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { eventCard, eventCards } from "../support/locators";
+import { eventCard, eventCards, gotoHome } from "../support/locators";
 
 const WIDTHS = [360, 390, 430] as const;
 
@@ -13,7 +13,7 @@ for (const width of WIDTHS) {
     test.use({ viewport: { width, height: 780 } });
 
     test("一覧の放送先が読め、横スクロールが発生せず、フィルタが初期画面を占有しない", async ({ page }) => {
-      await page.goto("/");
+      await gotoHome(page, "/");
       const card = eventCard(page, "demo-bay-ekiden");
       await expect(card).toBeVisible();
       await expect(card).toContainText("デモテレビ系列（架空）");
@@ -27,7 +27,7 @@ for (const width of WIDTHS) {
     });
 
     test("長い大会名・局名でも崩れない", async ({ page }) => {
-      await page.goto("/");
+      await gotoHome(page, "/");
       await expect(eventCards(page).first()).toBeVisible();
       // ハイドレーション前に DOM を書き換えると React が木を作り直すため、完了を待ってから差し替える
       await page.waitForFunction(() => {
@@ -49,7 +49,7 @@ for (const width of WIDTHS) {
 
     test("絞り込みダイアログは画面内に収まり、内容をスクロールして適用・キャンセルできる", async ({ page }) => {
       await page.setViewportSize({ width, height: 560 });
-      await page.goto("/");
+      await gotoHome(page, "/");
       await expect(eventCards(page).first()).toBeVisible();
       const trigger = page.getByRole("button", { name: /^絞り込み/ });
       await trigger.click();
@@ -85,7 +85,7 @@ for (const width of WIDTHS) {
     });
 
     test("放送・配信カード全体をタップでき、外部ページを新しいタブで開く", async ({ page }) => {
-      await page.goto("/");
+      await gotoHome(page, "/");
       const link = eventCard(page, "demo-track-night").getByRole("link", { name: /視聴ページへ/ });
       await expect(link).toHaveAttribute("target", "_blank");
       await expect(link).toHaveAttribute("rel", "noopener noreferrer");

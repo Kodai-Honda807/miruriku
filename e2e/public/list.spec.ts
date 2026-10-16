@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-import { eventCard, eventCards, visibleSlugs } from "../support/locators";
+import { eventCard, eventCards, gotoHome, visibleSlugs } from "../support/locators";
 
 // 基準日 2026-10-10（土）12:00 JST に固定（e2e/support/env.ts）
 
 test.describe("トップページの大会一覧", () => {
   test("駅伝・マラソン・トラックが同じ時系列一覧に開催日順で並ぶ", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await expect(page.getByRole("heading", { level: 1 })).toContainText("みる陸");
     await expect(page.getByText("次のレース、いつ・どこで見られる？").first()).toBeVisible();
     await expect(eventCards(page).first()).toBeVisible();
@@ -27,7 +27,7 @@ test.describe("トップページの大会一覧", () => {
   });
 
   test("下書きの大会・放送枠と終了済みの大会は表示されない", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
     await expect(eventCards(page).first()).toBeVisible();
     const slugs = await visibleSlugs(page);
     expect(slugs).not.toContain("demo-draft-ekiden");
@@ -37,7 +37,7 @@ test.describe("トップページの大会一覧", () => {
   });
 
   test("一覧のカードで放送・配信先と状態を確認できる", async ({ page }) => {
-    await page.goto("/");
+    await gotoHome(page, "/");
 
     const bay = eventCard(page, "demo-bay-ekiden");
     await expect(bay).toContainText("地上波");
@@ -82,5 +82,23 @@ test.describe("トップページの大会一覧", () => {
 
     // 過去大会の参考情報は今年の情報と区別
     await expect(eventCard(page, "demo-lakeside-marathon")).toContainText("過去大会の参考情報");
+  });
+});
+
+test.describe("JavaScript が無効な場合", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("ビルド時点の一覧（これから開催される大会）と、絞り込みに JavaScript が必要な旨を表示する", async ({ page }) => {
+    await page.goto("/");
+    const slugs = await visibleSlugs(page);
+    expect(slugs.slice(0, 3)).toEqual(["demo-bay-ekiden", "demo-track-night", "demo-city-marathon"]);
+    expect(slugs).not.toContain("demo-autumn-relay");
+    await expect(page.getByText(/絞り込みには JavaScript が必要です/)).toBeVisible();
+  });
+
+  test("大会詳細は JavaScript なしでも読める", async ({ page }) => {
+    await page.goto("/events/demo-championships/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("みる陸デモ陸上競技選手権");
+    await expect(page.getByText("BSデモ（架空）").first()).toBeVisible();
   });
 });
