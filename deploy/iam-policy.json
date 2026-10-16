@@ -26,6 +26,20 @@
         "lightsail:GetAutoSnapshots"
       ],
       "Resource": "*"
+    },
+    {
+      "Sid": "MirurikuRoute53Domain",
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZonesByName",
+        "route53:GetHostedZone",
+        "route53:ListResourceRecordSets",
+        "route53:ChangeResourceRecordSets",
+        "route53:GetChange",
+        "route53domains:GetDomainDetail",
+        "route53domains:GetContactReachabilityStatus"
+      ],
+      "Resource": "*"
     }
   ]
 }
