@@ -72,8 +72,9 @@ fi
 
 # --- 2. ホストゾーンと A レコード ------------------------------------------------
 zone_id="$(aws_cli route53 list-hosted-zones-by-name --dns-name "$domain" \
-  --query "HostedZones[?Name=='${domain}.' && !Config.PrivateZone].Id" --output text 2>&1)" ||
+  --query "HostedZones[?Name=='${domain}.' && Config.PrivateZone==\`false\`].Id" --output text 2>&1)" ||
   die "ホストゾーンを取得できませんでした（${permission_hint}）: ${zone_id}"
+[[ "$zone_id" != "None" ]] || zone_id=""
 zone_count="$(wc -w <<<"$zone_id")"
 ((zone_count == 1)) || die "${domain} の公開ホストゾーンが ${zone_count} 個あります（1 個である必要があります）。Route 53 コンソールで確認してください"
 zone_id="${zone_id##*/}"
