@@ -1,12 +1,16 @@
 /**
- * 公開ページ（トップ・大会詳細）用の読み取りクエリ。
+ * 公開用の読み取りクエリ（DB 版）。
+ *
+ * 公開サイトは静的配信のため、ページはビルド時に src/server/public-data のデータ（data/real-events.ts 由来）を使い、
+ * このクエリは使わない。ここに残すのは次の用途:
+ * - E2E: デモデータを入れた DB から公開データを書き出す（scripts/export-public-data.ts）
+ * - 公開データ（ファイル版）が DB 版と同じ結果になることの確認（src/server/public-data/public-data.db.test.ts）
  *
  * - 公開してよいのは「大会が PUBLISHED」かつ「放送枠が PUBLISHED」のものだけ。
  *   下書きの大会・放送枠は、ここで DB の条件として除外する（画面側のフィルタに頼らない）。
  * - select で公開に必要な列だけを読み、src/domain/types.ts のプレーンな型に詰め替える。
  *   内部向けの列（情報源のメモ、収集設定、抽出候補など）は返さない。
  * - DB の @db.Date 列は dbDateToLocalDate で "YYYY-MM-DD" に変換する。
- * - "use cache" は付けない（常に最新を表示し、ビルド時に DB へ接続しないため）。
  *
  * テストからテスト用 DB のクライアントを渡せるよう、実装は db を受け取る関数に分けている。
  */
@@ -21,7 +25,6 @@ import type {
   PublicSource,
 } from "@/domain/types";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { getPrisma } from "@/server/db";
 
 /** 公開クエリが使う最小限のクライアント（PrismaClient またはトランザクションクライアント） */
 export type PublicQueryDb = Pick<PrismaClient | Prisma.TransactionClient, "event">;
@@ -211,7 +214,24 @@ export async function getPublicEventDetailFrom(db: PublicQueryDb, slug: string):
   };
 }
 
-/** 公開中の大会一覧（絞り込み・並び替えは呼び出し側で filterAndSortEvents を使う） */
+/**
+ * 公開中の大会すべての詳細（終了した大会も含む）。静的ビルド用の公開データを DB から作るときに使う
+ * （scripts/export-public-data.ts。E2E でデモデータを静的ビルドするため）。
+ */
+export async function listPublicEventDetailsFrom(db: PublicQueryDb): Promise<PublicEventDetail[]> {
+  const rows = await db.event.findMany({
+    where: { status: "PUBLISHED" },
+    orderBy: [{ startDate: "asc" }, { startAt: { sort: "asc", nulls: "last" } }, { slug: "asc" }],
+    select: eventDetailSelect,
+  });
+  return rows.map((row) => ({
+    ...toPublicEventSummary(row),
+    description: row.description,
+    sessions: row.sessions.map(toPublicSession),
+    sources: row.sources.map(toPublicSource),
+  }));
+}
+
 /**
  * サイトマップ用: 公開中の大会の slug（終了した大会も含む。デモ大会は検索エンジンに出さないため除く）。
  * 更新日時は返さない（実データの反映のたびに DB の updatedAt が変わり、実際の更新日を表さないため）。
@@ -223,17 +243,4 @@ export async function listSitemapEventSlugsFrom(db: PublicQueryDb): Promise<stri
     select: { slug: true },
   });
   return rows.map((row) => row.slug);
-}
-
-export function listSitemapEventSlugs(): Promise<string[]> {
-  return listSitemapEventSlugsFrom(getPrisma());
-}
-
-export function listPublicEvents(now: Date): Promise<PublicEventSummary[]> {
-  return listPublicEventsFrom(getPrisma(), now);
-}
-
-/** 公開中の大会の詳細。下書き・存在しない slug は null */
-export function getPublicEventDetail(slug: string): Promise<PublicEventDetail | null> {
-  return getPublicEventDetailFrom(getPrisma(), slug);
 }
