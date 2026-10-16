@@ -2,6 +2,9 @@ import type { MetadataRoute } from "next";
 
 import { SITE_DESCRIPTION, SITE_NAME } from "@/components/site/site-header";
 
+/** 静的書き出しのため、ビルド時に生成する */
+export const dynamic = "force-static";
+
 /** Web App Manifest（ホーム画面に追加したときの名前・アイコン・色） */
 export default function manifest(): MetadataRoute.Manifest {
   return {

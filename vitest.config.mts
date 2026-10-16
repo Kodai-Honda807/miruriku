@@ -34,7 +34,8 @@ export default defineConfig({
           environment: "jsdom",
           include: ["src/**/*.test.tsx"],
           setupFiles: ["./test/setup-ui.ts"],
-          env: { TZ: "America/Los_Angeles" },
+          // __NEXT_TRAILING_SLASH: next.config.ts の trailingSlash と同じく、next/link が末尾のスラッシュを保つようにする
+          env: { TZ: "America/Los_Angeles", __NEXT_TRAILING_SLASH: "true" },
         },
       },
       {

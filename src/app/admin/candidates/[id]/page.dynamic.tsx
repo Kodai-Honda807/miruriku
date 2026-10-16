@@ -23,10 +23,11 @@ import { approveCandidateAction, rejectCandidateAction } from "@/server/admin/ac
 import { getCandidateDetail, getCurrentEventState } from "@/server/admin/queries";
 import { adminIdSchema } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../../page-props";
 
 export const metadata: Metadata = { title: "収集候補の確認" };
 
-export default function CandidateDetailPage({ params, searchParams }: PageProps<"/admin/candidates/[id]">) {
+export default function CandidateDetailPage({ params, searchParams }: AdminPageProps<{ id: string }>) {
   if (!isAdminEnabled()) notFound();
   return (
     <Suspense fallback={<Skeleton className="h-96" />}>
@@ -47,7 +48,7 @@ function approvedMessage(sp: Record<string, string | string[] | undefined>): str
     return v && /^\d{1,4}$/.test(v) ? Number(v) : 0;
   };
   return (
-    `承認して公開データに反映しました（放送・配信枠: 追加 ${count("added")} 件・更新 ${count("updated")} 件・` +
+    `承認して DB に反映しました（放送・配信枠: 追加 ${count("added")} 件・更新 ${count("updated")} 件・` +
     `変更なし ${count("unchanged")} 件、大会の項目の変更: ${count("eventFields")} 件）。`
   );
 }
@@ -62,7 +63,7 @@ function ExternalUrl({ url }: { url: string }) {
   );
 }
 
-async function CandidateDetail({ params, searchParams }: PageProps<"/admin/candidates/[id]">) {
+async function CandidateDetail({ params, searchParams }: AdminPageProps<{ id: string }>) {
   const { id } = await params;
   const sp = await searchParams;
   await connection();

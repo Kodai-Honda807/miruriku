@@ -13,10 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CATEGORY_LABELS } from "@/domain/labels";
 import { listAdminEvents } from "@/server/admin/queries";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../page-props";
 
 export const metadata: Metadata = { title: "大会" };
 
-export default function AdminEventsPage({ searchParams }: PageProps<"/admin/events">) {
+export default function AdminEventsPage({ searchParams }: AdminPageProps) {
   if (!isAdminEnabled()) notFound();
   return (
     <div className="grid gap-6">
@@ -33,7 +34,7 @@ export default function AdminEventsPage({ searchParams }: PageProps<"/admin/even
   );
 }
 
-async function EventsTable({ searchParams }: Pick<PageProps<"/admin/events">, "searchParams">) {
+async function EventsTable({ searchParams }: Pick<AdminPageProps, "searchParams">) {
   const { notice } = await searchParams;
   await connection();
   const events = await listAdminEvents();

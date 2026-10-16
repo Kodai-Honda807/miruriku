@@ -10,9 +10,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "MIRURIKU_INCLUDE_DEV_ROUTES=1 NEXT_DIST_DIR=.next next typegen && tsc --noEmit",
     "test": "vitest run --project unit --project ui",
     "test:watch": "vitest --project unit --project ui",
     "test:db": "vitest run --project db",

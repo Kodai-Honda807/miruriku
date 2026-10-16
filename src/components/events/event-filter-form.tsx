@@ -10,10 +10,10 @@
  * - 適用中の追加条件（競技・視聴方法・無料ネット配信）はボタンの横にチップで表示し、個別に外せる。
  *
  * 状態と URL:
- * - 状態の正は URL（サーバーから渡される filters）。JavaScript が有効なら router.replace で URL クエリを
- *   更新し（履歴は増やさない）、送信直後は useOptimistic で先に反映する。更新中は「更新中」を表示する。
- * - プログレッシブエンハンスメント: ダイアログも <form method="get" action="/"> の内側にあり、
- *   JavaScript が無効でも送信で絞り込める（ダイアログは対応ブラウザなら command 属性で開く）。
+ * - 状態の正は URL のクエリ（親から渡される filters）。条件を変えると onNavigate に新しい URL（"/?period=week" など）を
+ *   渡し、親（HomeEvents）が履歴を増やさずに URL を書き換える。送信直後は useOptimistic で先に反映する。
+ * - 静的配信のため、絞り込みはブラウザで行う。JavaScript が無効な場合はフォームを送信しても絞り込まれず、
+ *   ビルド時点の一覧（既定の条件）が表示される（ダイアログは対応ブラウザなら command 属性で開く）。
  *
  * 検索語（q）をいつ反映するか:
  * - 入力のたびには反映しない。Enter または「検索」ボタンで反映する。
@@ -22,7 +22,6 @@
  */
 import { LoaderCircle, Search, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useOptimistic, useRef, useState, type FormEvent, type MouseEvent } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -53,6 +52,8 @@ export type PeriodOption = {
 type Props = {
   filters: EventFilters;
   periodOptions: readonly PeriodOption[];
+  /** 条件を変えたときの URL（"/" または "/?..."）。履歴を増やさずに URL を書き換える */
+  onNavigate: (href: string) => void;
 };
 
 /** ダイアログで編集する条件 */
@@ -112,8 +113,7 @@ function isPlainClick(event: MouseEvent<HTMLElement>) {
   return !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0);
 }
 
-export function EventFilterForm({ filters, periodOptions }: Props) {
-  const router = useRouter();
+export function EventFilterForm({ filters, periodOptions, onNavigate }: Props) {
   const { isPending, startTransition } = useFilterTransition();
   const [optimistic, setOptimistic] = useOptimistic(filters);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -134,7 +134,7 @@ export function EventFilterForm({ filters, periodOptions }: Props) {
     const normalized = normalize(next);
     startTransition(() => {
       setOptimistic(normalized);
-      router.replace(`/${toQueryString(normalized)}`, { scroll: false });
+      onNavigate(`/${toQueryString(normalized)}`);
     });
   }
 

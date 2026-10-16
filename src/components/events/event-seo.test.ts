@@ -99,6 +99,6 @@ describe("serializeJsonLd / eventPath", () => {
   });
 
   it("詳細ページのパス", () => {
-    expect(eventPath("hakone-qualifier-2026")).toBe("/events/hakone-qualifier-2026");
+    expect(eventPath("hakone-qualifier-2026")).toBe("/events/hakone-qualifier-2026/");
   });
 });

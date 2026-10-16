@@ -11,6 +11,7 @@ import { EXTRACTION_PROVIDER_KIND_LABELS, FETCH_MODE_LABELS } from "@/domain/lab
 import { countCandidatesByStatus, listCandidates } from "@/server/admin/queries";
 import { parseCandidateListFilter, type CandidateListFilter } from "@/server/admin/schemas";
 import { isAdminEnabled } from "@/server/admin-guard";
+import type { AdminPageProps } from "../page-props";
 
 export const metadata: Metadata = { title: "収集候補" };
 
@@ -21,7 +22,7 @@ const FILTER_LABELS: Record<CandidateListFilter, string> = {
   all: "すべて",
 };
 
-export default function CandidatesPage({ searchParams }: PageProps<"/admin/candidates">) {
+export default function CandidatesPage({ searchParams }: AdminPageProps) {
   if (!isAdminEnabled()) notFound();
   return (
     <div className="grid gap-6">
@@ -36,7 +37,7 @@ export default function CandidatesPage({ searchParams }: PageProps<"/admin/candi
   );
 }
 
-async function CandidateList({ searchParams }: Pick<PageProps<"/admin/candidates">, "searchParams">) {
+async function CandidateList({ searchParams }: Pick<AdminPageProps, "searchParams">) {
   const { status } = await searchParams;
   await connection();
   const filter = parseCandidateListFilter(status);

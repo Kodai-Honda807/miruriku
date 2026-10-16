@@ -6,11 +6,7 @@ import { DEFAULT_FILTERS, type EventFilters } from "@/domain/filters";
 
 import { EventFilterForm, FILTER_DIALOG_ID, type PeriodOption } from "./event-filter-form";
 
-const replace = vi.fn();
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
-}));
+const navigate = vi.fn();
 
 const PERIOD_OPTIONS: PeriodOption[] = [
   { value: "today", label: "今日", rangeLabel: "10月10日（土）" },
@@ -19,7 +15,7 @@ const PERIOD_OPTIONS: PeriodOption[] = [
 ];
 
 function renderForm(filters: Partial<EventFilters> = {}) {
-  return render(<EventFilterForm filters={{ ...DEFAULT_FILTERS, ...filters }} periodOptions={PERIOD_OPTIONS} />);
+  return render(<EventFilterForm filters={{ ...DEFAULT_FILTERS, ...filters }} periodOptions={PERIOD_OPTIONS} onNavigate={navigate} />);
 }
 
 function dialog() {
@@ -37,11 +33,11 @@ async function openDialog(user: ReturnType<typeof userEvent.setup>) {
 }
 
 beforeEach(() => {
-  replace.mockClear();
+  navigate.mockClear();
 });
 
 describe("EventFilterForm: E2E 用の契約とプログレッシブエンハンスメント", () => {
-  it("GET で / に送信できる検索フォーム（JavaScript なしでも動く）", () => {
+  it("GET で / に送信できる検索フォーム（JavaScript の読み込み前に送信されても、URL の条件で絞り込まれる）", () => {
     renderForm();
     const form = screen.getByRole("search", { name: "大会の絞り込み" });
     expect(form.tagName).toBe("FORM");
@@ -133,7 +129,7 @@ describe("EventFilterForm: 期間と検索語", () => {
     const user = userEvent.setup();
     renderForm({ categories: ["TRACK"] });
     await user.click(screen.getByRole("radio", { name: "今日" }));
-    expect(replace).toHaveBeenLastCalledWith("/?period=today&category=track", { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith("/?period=today&category=track");
   });
 
   it("検索語は Enter / 検索ボタンで反映し、入力中には更新しない", async () => {
@@ -141,13 +137,13 @@ describe("EventFilterForm: 期間と検索語", () => {
     renderForm();
     const input = screen.getByLabelText("大会名で検索");
     await user.type(input, " 湾岸 ");
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "検索" }));
-    expect(replace).toHaveBeenLastCalledWith(`/?q=${encodeURIComponent("湾岸")}`, { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith(`/?q=${encodeURIComponent("湾岸")}`);
 
-    replace.mockClear();
+    navigate.mockClear();
     await user.type(input, "{Enter}");
-    expect(replace).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 
   it("入力中の検索語は、期間の切替・ダイアログの適用のときにも合わせて反映する（コメントの仕様どおり）", async () => {
@@ -155,14 +151,14 @@ describe("EventFilterForm: 期間と検索語", () => {
     renderForm();
     await user.type(screen.getByLabelText("大会名で検索"), "駅伝");
     await user.click(screen.getByRole("radio", { name: "今週（7日間）" }));
-    expect(replace).toHaveBeenLastCalledWith(`/?period=week&q=${encodeURIComponent("駅伝")}`, { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith(`/?period=week&q=${encodeURIComponent("駅伝")}`);
 
-    replace.mockClear();
+    navigate.mockClear();
     const d = await openDialog(user);
     await user.click(d.getByRole("checkbox", { name: "BS" }));
     await user.click(d.getByRole("button", { name: "適用" }));
-    expect(replace).toHaveBeenCalledTimes(1);
-    expect(replace.mock.calls[0]![0]).toContain(`q=${encodeURIComponent("駅伝")}`);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0]![0]).toContain(`q=${encodeURIComponent("駅伝")}`);
   });
 
   it("「条件をクリア」で既定の条件に戻す", async () => {
@@ -171,7 +167,7 @@ describe("EventFilterForm: 期間と検索語", () => {
     const clear = screen.getByRole("link", { name: "条件をクリア" });
     expect(clear).toHaveAttribute("href", "/");
     await user.click(clear);
-    expect(replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith("/");
     expect(screen.getByLabelText("大会名で検索")).toHaveValue("");
   });
 });
@@ -184,13 +180,11 @@ describe("EventFilterForm: 絞り込みダイアログ", () => {
     await user.click(d.getByRole("checkbox", { name: "駅伝" }));
     await user.click(d.getByRole("checkbox", { name: "地上波" }));
     await user.click(d.getByRole("checkbox", { name: "無料ネット配信あり" }));
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
 
     await user.click(d.getByRole("button", { name: "適用" }));
-    expect(replace).toHaveBeenCalledTimes(1);
-    expect(replace).toHaveBeenLastCalledWith("/?period=week&category=ekiden&medium=terrestrial&free=1", {
-      scroll: false,
-    });
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenLastCalledWith("/?period=week&category=ekiden&medium=terrestrial&free=1");
     expect(dialog().open).toBe(false);
   });
 
@@ -201,7 +195,7 @@ describe("EventFilterForm: 絞り込みダイアログ", () => {
     await user.click(d.getByRole("checkbox", { name: "駅伝" }));
     await user.click(d.getByRole("checkbox", { name: "BS" }));
     await user.click(d.getByRole("button", { name: "キャンセル" }));
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
     expect(dialog().open).toBe(false);
 
     d = await openDialog(user);
@@ -215,7 +209,7 @@ describe("EventFilterForm: 絞り込みダイアログ", () => {
     const d = await openDialog(user);
     await user.click(d.getByRole("checkbox", { name: "トラック" }));
     await user.click(d.getByRole("button", { name: "閉じる（変更を破棄）" }));
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
     expect(dialog().open).toBe(false);
   });
 
@@ -233,9 +227,9 @@ describe("EventFilterForm: 絞り込みダイアログ", () => {
     const d = await openDialog(user);
     await user.click(d.getByRole("button", { name: "すべて外す" }));
     expect(d.getByRole("checkbox", { name: "駅伝" })).not.toBeChecked();
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
     await user.click(d.getByRole("button", { name: "適用" }));
-    expect(replace).toHaveBeenLastCalledWith(`/?q=${encodeURIComponent("駅伝")}`, { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith(`/?q=${encodeURIComponent("駅伝")}`);
   });
 
   it("背景（ダイアログ要素そのもの）のクリックはキャンセル扱い", async () => {
@@ -245,7 +239,7 @@ describe("EventFilterForm: 絞り込みダイアログ", () => {
     await user.click(d.getByRole("checkbox", { name: "駅伝" }));
     await user.click(dialog());
     expect(dialog().open).toBe(false);
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
 
@@ -267,6 +261,6 @@ describe("EventFilterForm: 適用中の追加条件", () => {
       "/?period=today&category=ekiden&category=track",
     );
     await user.click(remove);
-    expect(replace).toHaveBeenLastCalledWith("/?period=today&category=track&free=1", { scroll: false });
+    expect(navigate).toHaveBeenLastCalledWith("/?period=today&category=track&free=1");
   });
 });
