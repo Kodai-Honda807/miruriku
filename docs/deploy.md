@@ -54,7 +54,7 @@ WSL（Ubuntu）から AWS CLI と SSH だけで、Amazon Lightsail のインス�
    aws configure --profile miruriku       # IAM ユーザーのアクセスキーを使う場合
    ```
 
-   このユーザー（ロール）に必要な権限は [deploy/iam-policy.json](../deploy/iam-policy.json) です。Lightsail の操作だけに絞っています。
+   このユーザー（ロール）に必要な権限は [deploy/iam-policy.json](../deploy/iam-policy.json) です。Lightsail の操作と、独自ドメインに切り替えるための Route 53 の操作（`deploy/domain.sh`）に絞っています。
 
 4. 設定ファイルを作ります。
 
@@ -81,21 +81,30 @@ WSL（Ubuntu）から AWS CLI と SSH だけで、Amazon Lightsail のインス�
 
 ### 独自ドメイン（例: miruriku.com）を使う
 
-1. Route 53 でドメインを登録し、「ドメイン」→「リクエスト」で登録が完了していること、登録者のメールアドレスを認証済みであることを確認します。
-2. 自動で作られたホストゾーン（`miruriku.com`）に、A レコードを 2 つ作ります。値はどちらも静的 IP（`./deploy/ops.sh status` で確認）、TTL は 300 秒で構いません。
-   - レコード名なし（`miruriku.com`）
-   - `www`（`www.miruriku.com`。任意。作ると `miruriku.com` へ転送します）
-3. 手元で反映を確認します: `getent ahostsv4 miruriku.com`（静的 IP が表示されれば OK）。
-4. `deploy/.env` に `DOMAIN="miruriku.com"` を設定し、`./deploy/deploy.sh` を実行します。
+Route 53 でドメインを登録したら、次の 1 コマンドで切り替えます。
+
+```bash
+git pull
+./deploy/domain.sh miruriku.com
+```
+
+`domain.sh` が行うこと（何度実行しても同じ結果になります。変更の前に確認を求めます）:
+
+1. 登録者メールアドレスの認証状況を確認する（未認証なら、Route 53 から届いたメールのリンクを開くよう案内して中止）
+2. 登録時に自動で作られたホストゾーンに、A レコード（`miruriku.com` と `www.miruriku.com` → 静的 IP、TTL 300）を作成・更新する
+3. 手元の DNS で静的 IP に解決されるまで最大 15 分待つ（登録直後でまだ解決されない場合は中止。しばらくしてから再実行する）
+4. `deploy/.env` を `DOMAIN="miruriku.com"` に書き換え、`./deploy/deploy.sh` を実行する
+
+使う AWS の権限は [deploy/iam-policy.json](../deploy/iam-policy.json) の `MirurikuRoute53Domain` です（Route 53 のレコード操作と、ドメイン登録情報の読み取り）。
 
 `deploy.sh` は、ドメインが静的 IP に向いていなければ中止します（証明書を取得できないため）。
 `www.<ドメイン>`（DNS が向いている場合）と以前の sslip.io の URL は、パスを保ったまま `https://<ドメイン>` へ 301 転送します。
 canonical・OGP・サイトマップの URL も新しいドメインになります。
 
-切り替えたあとに行うこと:
+切り替えたあとに行うこと（どちらも任意。行わなくてもサイトの公開と GA の計測は続きます）:
 
-- Google アナリティクス: 管理 →「データストリーム」でウェブストリームの URL を `https://miruriku.com` に変更する（測定 ID は変わらない）
-- Google Search Console: 「ドメイン」プロパティで `miruriku.com` を追加し、表示された TXT レコードを Route 53 のホストゾーンに追加して所有権を確認する。確認後に `https://miruriku.com/sitemap.xml` を送信する
+- Google アナリティクス: 管理 →「データストリーム」でウェブストリームの URL を `https://miruriku.com` に変更する（表示上の設定。測定 ID は変わらず、変更しなくても計測される）
+- Google Search Console（検索での表示状況を見たい場合）: 「ドメイン」プロパティで `miruriku.com` を追加し、表示された TXT レコードを Route 53 のホストゾーンに追加して所有権を確認する。確認後に `https://miruriku.com/sitemap.xml` を送信する
 
 ## 更新
 
