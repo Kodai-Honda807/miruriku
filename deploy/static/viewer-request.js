@@ -7,6 +7,8 @@
 // 3. 拡張子のないパス（/events/<slug>）は、末尾に / を付けた URL へ 301 で転送する
 //
 // クエリは rawQueryString()（受け取ったままの文字列）で引き継ぐ（日本語の検索語などを二重にエンコードしないため）。
+// CloudFront が呼び出す関数（このファイル内では呼ばない）
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function handler(event) {
   var request = event.request;
   var uri = request.uri;

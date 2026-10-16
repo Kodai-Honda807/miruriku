@@ -8,11 +8,11 @@
  * 公開サイトは静的配信のため、管理画面は本番に存在しない（静的ビルドから除外。next.config.ts）。
  * 大会詳細の 404 は、ビルド時に生成したページ以外を返さないことで扱う（generateStaticParams / dynamicParams = false）。
  */
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 import { isAdminEnabled } from "@/server/admin-guard";
 
-export function proxy() {
+export function proxy(_request: NextRequest) {
   if (!isAdminEnabled()) {
     return new NextResponse("Not Found", {
       status: 404,
