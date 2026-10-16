@@ -48,3 +48,22 @@ test.describe("大会詳細", () => {
     await expect(page.getByText("下書きの放送枠（非公開・デモ）")).toHaveCount(0);
   });
 });
+
+test.describe("検索エンジン向けの情報", () => {
+  test("大会名のタイトルと開催日入りの説明文を持ち、デモ大会は noindex で構造化データを出さない", async ({ page }) => {
+    await page.goto("/events/demo-championships");
+    await expect(page).toHaveTitle("みる陸デモ陸上競技選手権 | みる陸");
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute("content", /開催のみる陸デモ陸上競技選手権/);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
+    await expect(page.locator('script[type="application/ld+json"]')).toHaveCount(0);
+  });
+
+  test("robots.txt は管理画面を除外し、アイコンとマニフェストを配信する", async ({ request }) => {
+    const robots = await request.get("/robots.txt");
+    expect(robots.ok()).toBe(true);
+    expect(await robots.text()).toContain("Disallow: /admin");
+    for (const path of ["/favicon.ico", "/icon.svg", "/apple-icon.png", "/opengraph-image.png", "/manifest.webmanifest"]) {
+      expect((await request.get(path)).status(), path).toBe(200);
+    }
+  });
+});

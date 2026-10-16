@@ -32,10 +32,14 @@ services:
     build:
       context: ..
       target: runner
+      args:
+        # canonical・OGP の絶対 URL（ビルド時）と、サイトマップの URL（実行時）に使う
+        MIRURIKU_SITE_URL: https://${DOMAIN:?settings.env に DOMAIN がありません}
     image: miruriku-web:${RELEASE:-latest}
     restart: unless-stopped
     environment:
       DATABASE_URL: *database-url
+      MIRURIKU_SITE_URL: https://${DOMAIN:?settings.env に DOMAIN がありません}
     depends_on:
       db:
         condition: service_healthy

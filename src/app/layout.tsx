@@ -1,17 +1,29 @@
 import type { Metadata, Viewport } from "next";
 
 import { GoogleAnalytics } from "@/components/site/analytics";
-import { SITE_CATCHPHRASE, SITE_DESCRIPTION, SITE_NAME } from "@/components/site/site-header";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/components/site/site-header";
+import { BASE_OPEN_GRAPH, BASE_TWITTER, SITE_TITLE } from "@/components/site/seo";
+import { getSiteUrl } from "@/lib/site-url";
 
 import "./globals.css";
 
+const siteUrl = getSiteUrl();
+
+/**
+ * サイト全体のメタデータ。
+ * - metadataBase はサイト URL（MIRURIKU_SITE_URL）。未設定なら付けない（誤った絶対 URL を出さない）。
+ * - アイコンは app/ 直下のファイル（icon.svg、apple-icon.png、favicon.ico）。OGP 画像は public/opengraph-image.png（src/components/site/seo.ts）。
+ */
 export const metadata: Metadata = {
+  ...(siteUrl ? { metadataBase: siteUrl } : {}),
   title: {
-    default: `${SITE_NAME} | ${SITE_CATCHPHRASE}`,
+    default: SITE_TITLE,
     template: `%s | ${SITE_NAME}`,
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
+  openGraph: BASE_OPEN_GRAPH,
+  twitter: BASE_TWITTER,
   // 日付や時刻の数字列が電話番号として自動リンクされないようにする
   formatDetection: { telephone: false, address: false, email: false },
 };

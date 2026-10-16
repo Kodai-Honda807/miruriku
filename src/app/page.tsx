@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
 
@@ -5,7 +6,10 @@ import { EventFilterForm, type PeriodOption } from "@/components/events/event-fi
 import { formatPeriodRange } from "@/components/events/event-format";
 import { EventResults } from "@/components/events/event-results";
 import { EventListSkeleton, FilterFormSkeleton } from "@/components/events/event-skeletons";
+import { serializeJsonLd } from "@/components/events/event-seo";
 import { FilterPendingRegion, FilterTransitionProvider } from "@/components/events/filter-transition";
+import { BASE_OPEN_GRAPH, canonical } from "@/components/site/seo";
+import { SITE_DESCRIPTION, SITE_NAME } from "@/components/site/site-header";
 import { SiteShell } from "@/components/site/site-shell";
 import {
   PERIODS,
@@ -14,10 +18,40 @@ import {
   getPeriodRange,
   parseEventFilters,
 } from "@/domain/filters";
+import { getSiteUrl } from "@/lib/site-url";
 import { getNow } from "@/server/clock";
 import { listPublicEvents } from "@/server/queries/public-events";
 
 type SearchParamsPromise = PageProps<"/">["searchParams"];
+
+/**
+ * 絞り込み条件付きの URL（?period=week など）も canonical は「/」にまとめる
+ * （同じ一覧の言い換えが別ページとして評価されないようにする）。
+ */
+export const metadata: Metadata = {
+  ...canonical("/"),
+  openGraph: { ...BASE_OPEN_GRAPH, url: "/" },
+};
+
+/** サイト名を検索エンジンに伝える構造化データ（schema.org WebSite） */
+function WebSiteJsonLd() {
+  const site = getSiteUrl();
+  if (!site) return null;
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: SITE_NAME,
+    url: site.toString(),
+    description: SITE_DESCRIPTION,
+    inLanguage: "ja",
+  };
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: serializeJsonLd(ld) }}
+    />
+  );
+}
 
 /**
  * トップページ: 駅伝・マラソン・トラックの大会を同じ時系列一覧で表示する（日本時間基準）。
@@ -30,6 +64,7 @@ type SearchParamsPromise = PageProps<"/">["searchParams"];
 export default function HomePage({ searchParams }: PageProps<"/">) {
   return (
     <SiteShell home>
+      <WebSiteJsonLd />
       <FilterTransitionProvider>
         <section aria-labelledby="event-filter-heading" className="flex flex-col gap-3">
           <h2 id="event-filter-heading" className="sr-only">
