@@ -12,7 +12,7 @@ import Script from "next/script";
  * - App Router のクライアント遷移（フィルタ変更の URL 更新、詳細ページへの移動）は、
  *   GA4 の拡張計測「ブラウザの履歴イベントに基づくページの変更」で page_view になる。
  */
-export const GA_MEASUREMENT_ID = "G-BS0QJ1TTSS";
+export const GA_MEASUREMENT_ID = "G-E17SENSEG0";
 
 type AnalyticsEnv = { NODE_ENV?: string; NEXT_PUBLIC_DISABLE_ANALYTICS?: string };
 
