@@ -87,10 +87,10 @@ describe("EventCard: 放送情報の状態", () => {
 });
 
 describe("EventCard: 日時", () => {
-  it("開始時刻が不明なら「開始時刻未定」を表示し、0:00 などの仮時刻を出さない", () => {
+  it("開始時刻が不明なら「開始時刻未確認」を表示し、0:00 などの仮時刻を出さない", () => {
     const { card } = renderCard({ startAt: null, broadcastCheckedAt: null });
     const schedule = within(card).getByTestId("event-schedule");
-    expect(schedule).toHaveTextContent("開始時刻未定");
+    expect(schedule).toHaveTextContent("開始時刻未確認");
     expect(schedule).toHaveTextContent("10月12日（月）");
     expect(schedule.textContent).not.toMatch(STANDALONE_MIDNIGHT);
     expect(card.textContent).not.toMatch(STANDALONE_MIDNIGHT);
@@ -126,7 +126,7 @@ describe("EventCard: 日時", () => {
     const schedule = within(card).getByTestId("event-schedule");
     expect(schedule).toHaveTextContent("11月1日（日）");
     expect(schedule).toHaveTextContent("現地日付");
-    expect(schedule).toHaveTextContent("開始時刻未定（日本時間の日付は変わる場合があります）");
+    expect(schedule).toHaveTextContent("開始時刻未確認（日本時間の日付は変わる場合があります）");
     expect(schedule.textContent).not.toMatch(STANDALONE_MIDNIGHT);
   });
 
@@ -205,8 +205,8 @@ describe("EventCard: 放送・配信枠", () => {
     expect(slot).toHaveTextContent("過去大会の参考情報");
     expect(within(card).getByRole("heading", { name: "過去大会の参考情報" })).toBeInTheDocument();
     expect(card).toHaveTextContent("今年の放送・配信予定ではありません");
-    // 今年の予定のような「日時未定」表示はしない
-    expect(slot).not.toHaveTextContent("日時未定");
+    // 今年の予定のような「日時未確認」表示はしない
+    expect(slot).not.toHaveTextContent("日時未確認");
   });
 
   it("未確認の枠は「未確認」と表示する", () => {
@@ -227,5 +227,37 @@ describe("EventCard: 放送・配信枠", () => {
     expect(regional).toHaveTextContent("地域限定（テスト県内のみ）");
     expect(unknown).toHaveTextContent("日本での視聴可否不明");
     expect(unknown).toHaveTextContent("料金不明");
+  });
+});
+
+describe("EventCard: 放送枠の出典と確認日時", () => {
+  it("一覧でも放送枠ごとに出典リンクと確認日時を表示する", () => {
+    const event = makeEvent({
+      broadcasts: [
+        makeBroadcast({
+          source: { url: "https://example.com/program", title: "番組公式ページ（テスト）" },
+        }),
+      ],
+    });
+    render(<EventCard event={event} now={FIXED_NOW} />);
+    const provenance = screen.getByTestId("slot-provenance");
+    expect(provenance).toHaveTextContent("出典: 番組公式ページ（テスト）");
+    expect(provenance).toHaveTextContent("確認日時: 10月8日（木）11:30");
+    const link = within(provenance).getByRole("link", { name: /出典: 番組公式ページ（テスト）/ });
+    expect(link).toHaveAttribute("href", "https://example.com/program");
+  });
+
+  it("出典も確認日時もない枠では、一覧に出典欄を出さない", () => {
+    const event = makeEvent({ broadcasts: [makeBroadcast({ verifiedAt: null, source: null })] });
+    render(<EventCard event={event} now={FIXED_NOW} />);
+    expect(screen.queryByTestId("slot-provenance")).not.toBeInTheDocument();
+  });
+
+  it("安全でない出典 URL はリンクにしない", () => {
+    const event = makeEvent({
+      broadcasts: [makeBroadcast({ verifiedAt: null, source: { url: "javascript:alert(1)", title: "不正" } })],
+    });
+    render(<EventCard event={event} now={FIXED_NOW} />);
+    expect(screen.queryByRole("link", { name: /出典/ })).not.toBeInTheDocument();
   });
 });

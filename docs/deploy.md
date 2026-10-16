@@ -1,0 +1,143 @@
+# AWS（Lightsail）へのデプロイ
+
+WSL（Ubuntu）から AWS CLI と SSH だけで、Amazon Lightsail のインスタンス 1 台にデプロイします。
+数人で使う前提の、安く・壊れにくく・後片付けしやすい構成です。
+
+```
+利用者 ─ HTTPS ─ Lightsail インスタンス（Ubuntu 24.04、2GB）
+                  └ Docker Compose
+                     ├ caddy  … HTTPS 終端（Let's Encrypt で証明書を自動取得）。/admin は常に 404
+                     ├ web    … Next.js（Dockerfile の runner）。外部には公開しない
+                     ├ db     … PostgreSQL 18。ポートは公開しない
+                     └ migrate / tools … デプロイ時に 1 回だけ実行（マイグレーション・実在データの反映）
+```
+
+- 管理画面は本番モードでは常に無効です（アプリ側で 404、さらに Caddy でも遮断）。候補のレビューはローカルで行います。
+- DB のパスワードはサーバー上で生成し、`/opt/miruriku/shared/secrets.env`（権限 600）にだけ保存します。手元にもイメージにも入りません。
+- SSH（22 番）は、実行した時点のグローバル IP からだけ許可します。80/443 番だけを公開します。
+
+## 費用の目安
+
+| 項目 | 料金 |
+| --- | --- |
+| インスタンス（`small_3_0`: 2GB メモリ・60GB SSD・転送 3TB） | 月 12 USD |
+| 静的 IP（インスタンスに割り当てている間） | 無料 |
+| 自動スナップショット（毎日・7 世代） | 保存容量 × 0.05 USD/GB月（数 GB なら月 1 USD 未満〜数 USD） |
+
+料金は [Lightsail の料金ページ](https://aws.amazon.com/lightsail/pricing/)（2026-10 時点）によります。インスタンスは**停止していても課金されます**。課金を止めるには `./deploy/destroy.sh` で削除してください。新規利用者向けの無料枠がある場合がありますが、条件は料金ページで確認してください。
+
+2GB のプランにしているのは、サーバー上で `next build` を行うためです（1GB では不足するおそれがあります）。
+
+### ほかの構成を選ばなかった理由
+
+- App Runner: 2026-04-30 以降、新規の利用者を受け付けていません（[AWS の案内](https://aws.amazon.com/apprunner/)）。
+- ECS Fargate + RDS + ALB（docs/design.md の将来構成）: ロードバランサーと RDS だけで月 30 USD 以上かかり、数人で使うには過剰です。利用者が増えたら移行を検討します。
+- Lightsail のコンテナサービス + マネージド DB: 月 25 USD ほど。マイグレーションやデータの反映を 1 回だけ実行する手段が乏しいため見送りました。
+
+## 事前準備（WSL）
+
+1. リポジトリは WSL のファイルシステム（例 `~/src/miruriku`）に clone します。`/mnt/c` 配下では SSH 鍵の権限を設定できず、実行も遅くなります。
+2. 必要なコマンド: `aws`（AWS CLI v2）、`ssh`、`ssh-keygen`、`git`、`curl`、`tar`、`gzip`。手元に Docker は不要です（ビルドはサーバー上で行います）。
+
+   ```bash
+   sudo apt-get update && sudo apt-get install -y openssh-client git curl unzip
+   curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+   unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install
+   aws --version
+   ```
+
+3. AWS の認証情報を、名前付きプロファイルとして設定します（アクセスキーを `deploy/.env` に書くのは非推奨です）。
+
+   ```bash
+   aws configure sso --profile miruriku   # IAM Identity Center を使う場合（推奨）
+   # または
+   aws configure --profile miruriku       # IAM ユーザーのアクセスキーを使う場合
+   ```
+
+   このユーザー（ロール）に必要な権限は [deploy/iam-policy.json](../deploy/iam-policy.json) です。Lightsail の操作だけに絞っています。
+
+4. 設定ファイルを作ります。
+
+   ```bash
+   cp deploy/.env.example deploy/.env
+   # AWS_PROFILE・リージョン・ドメインなどを確認して編集
+   ```
+
+## 初回のデプロイ
+
+```bash
+./deploy/provision.sh   # Lightsail のリソースを作成（料金が発生します。内容を表示してから確認を求めます）
+./deploy/deploy.sh      # ビルド → マイグレーション → 実在データの反映 → 起動 → 動作確認
+```
+
+- `provision.sh` が作るもの: インスタンス、静的 IP、SSH 鍵の登録（秘密鍵は手元の `~/.ssh/miruriku-lightsail` のまま）、ファイアウォール、自動スナップショット。何度実行しても、既にあるものは作り直しません。
+- 初回起動時に `deploy/cloud-init.sh` が Docker の導入・スワップの追加・自動セキュリティ更新の有効化を行います（数分かかります）。
+- `deploy.sh` は**コミット済みの HEAD だけ**を転送します。未コミットの変更があると止まります（`--allow-dirty` で続行できますが、変更は反映されません）。
+- 初回のビルドは 10 分ほどかかります。完了すると `https://<ドメイン>/api/health` と、`/admin` が 404 になることを確認します。
+
+### ドメイン
+
+`deploy/.env` の `DOMAIN` が空なら、`1-2-3-4.sslip.io` のような名前を使います（[sslip.io](https://sslip.io/) は IP アドレスをそのまま名前として解決する公開 DNS です）。独自ドメインを使う場合は、DNS の A レコードを静的 IP に向けてから `DOMAIN` を設定し、`./deploy/deploy.sh` を実行してください。
+
+## 更新
+
+```bash
+# data/real-events.ts やコードを直してコミットしたあと
+./deploy/deploy.sh
+```
+
+毎回、マイグレーションと実在データの反映（`pnpm data:load` 相当）を行います。データを変えずにコードだけ反映するときは `--skip-data-load` を付けます。ビルドに失敗した場合は、動いているコンテナはそのまま残ります。
+
+## タグ（他のアプリのリソースとの区別）
+
+`deploy/.env` の `RESOURCE_TAGS`（既定 `project=miruriku environment=production managed-by=miruriku-deploy`）を、`provision.sh` の実行のたびに付けます。作成済みのリソースにも付け直すので、値を変えたときは `./deploy/provision.sh` を再実行してください（既存のタグは消しません）。
+
+| リソース | タグ | 区別のしかた |
+| --- | --- | --- |
+| インスタンス | 付く（作成時と毎回の provision） | タグ |
+| SSH 鍵（キーペア） | 付く | タグ |
+| 静的 IP | **付けられない**（Lightsail がタグに対応していない） | 名前（`miruriku-ip`） |
+| 自動スナップショット | **引き継がれない**（Lightsail の仕様） | 元のインスタンス名 |
+
+Lightsail でタグを付けられるリソースの種類は [Lightsail のタグのドキュメント](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-tags.html)、自動スナップショットの扱いは [自動スナップショットのドキュメント](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configuring-automatic-snapshots.html) にあります。この構成では Lambda などほかのサービスのリソースは作りません。
+
+```bash
+./deploy/ops.sh resources   # RESOURCE_TAGS の最初のタグで絞り込んで、このアプリのリソースを一覧表示
+```
+
+請求額をタグで分けて見たい場合は、Billing and Cost Management の「コスト配分タグ」で `project` を有効にします（有効にした時点以降の利用分から反映されます）。
+
+## 運用コマンド
+
+```bash
+./deploy/ops.sh status               # コンテナの状態・ディスク・メモリ
+./deploy/ops.sh logs web             # ログ（web / caddy / db）
+./deploy/ops.sh ssh                  # SSH 接続
+./deploy/ops.sh collect --all        # 収集 CLI を本番 DB に対してドライランで実行（候補は保存しない）
+./deploy/ops.sh backup               # DB のダンプを deploy/backups/ に保存
+./deploy/ops.sh allow-ssh            # 自宅の IP が変わったときに SSH の許可を更新
+./deploy/ops.sh resources            # このアプリの Lightsail リソースとタグの一覧
+./deploy/destroy.sh                  # すべて削除して課金を止める（DB のデータも消えます）
+```
+
+### バックアップからの復元
+
+```bash
+# 手元のダンプをサーバーに送り、DB に復元する（既存のデータは置き換わります）
+./deploy/ops.sh ssh   # 先に接続できることを確認
+scp -i ~/.ssh/miruriku-lightsail -o UserKnownHostsFile=~/.ssh/miruriku_known_hosts \
+  deploy/backups/<ファイル>.dump ubuntu@<静的IP>:/opt/miruriku/backups/
+# サーバー上で
+docker compose -p miruriku \
+  --env-file /opt/miruriku/shared/secrets.env --env-file /opt/miruriku/shared/settings.env \
+  -f /opt/miruriku/current/deploy/compose.prod.yml \
+  exec -T db pg_restore -U miruriku -d miruriku --clean --if-exists < /opt/miruriku/backups/<ファイル>.dump
+```
+
+## 注意点・未対応のこと
+
+- 認証のない管理画面は公開しません。本番で候補のレビューや編集をしたい場合は、先に管理者の認証・認可を実装する必要があります。
+- 公開した URL は誰でも開けます。数人だけで使いたい場合は、URL を限られた人にだけ共有してください（検索エンジンへの登録を避ける設定は未対応です）。
+- 収集 CLI の定期実行は設定していません。
+- サーバーは 1 台なので、OS の再起動やデプロイ中は数十秒止まります。
+- OS のセキュリティ更新は自動で適用されますが、カーネル更新後の再起動は手動です（`./deploy/ops.sh ssh` → `sudo reboot`）。

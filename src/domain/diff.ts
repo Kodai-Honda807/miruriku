@@ -3,9 +3,11 @@
  *
  * 方針:
  * - 候補で不明（null / UNKNOWN）の項目は既存値を上書きしない（「見つからない」≠「なし」）
+ * - 確認済み（CONFIRMED）の大会を、候補の「未発表」（NOT_ANNOUNCED）で上書きしない
  * - 候補に含まれない既存の放送枠は削除しない（untouchedSlots として提示のみ）
  * - 過去大会の参考情報（PAST_REFERENCE）の枠は照合対象にしない（今年の情報は別の枠として追加する）
  * - 局・サービス名の表記ゆれ（全角・半角、空白）だけの違いは変更として扱わない
+ * - 緩い照合では、局・サービス名末尾の括弧書き（「TVer（ティーバー）」の読みなど）の違いを無視する
  * - 収集時にスナップショットを保存し、レビュー画面・承認時には最新の状態で再計算する
  */
 import type { NormalizedBroadcast, NormalizedExtraction } from "./candidate";
@@ -165,8 +167,8 @@ function slotChanges(slot: CurrentSlotState, proposed: NormalizedBroadcast): Fie
     if (field === "startAt" || field === "endAt") {
       equal = sameInstant(before, after);
     } else if (field === "providerName") {
-      // 全角・半角や空白だけの表記ゆれでは、人が入力した名称を上書きしない
-      equal = before !== null && normalizeProviderName(before) === normalizeProviderName(after);
+      // 全角・半角や空白、末尾の括弧書きだけの違いでは、人が入力した名称を上書きしない
+      equal = before !== null && providerBaseName(before) === providerBaseName(after);
     } else {
       equal = before === after;
     }
@@ -184,10 +186,20 @@ function isExactMatch(slot: CurrentSlotState, proposed: NormalizedBroadcast): bo
   );
 }
 
-/** 日付や視聴形態が片方だけ不明な場合も同じ枠とみなす緩い照合 */
+/**
+ * 緩い照合用の局・サービス名。末尾の括弧書き（読み・チャンネル名などの補足）を除く。
+ * 例: 「TVer（ティーバー）」「YouTube（東京マラソン財団公式チャンネル）」→「tver」「youtube」
+ */
+export function providerBaseName(name: string): string {
+  const normalized = normalizeProviderName(name);
+  const base = normalized.replace(/(\([^()]*\))+$/u, "");
+  return base || normalized;
+}
+
+/** 日付や視聴形態が片方だけ不明な場合、局・サービス名の括弧書きだけが違う場合も同じ枠とみなす緩い照合 */
 function isLooseMatch(slot: CurrentSlotState, proposed: NormalizedBroadcast): boolean {
   if (slot.medium !== proposed.medium) return false;
-  if (normalizeProviderName(slot.providerName) !== normalizeProviderName(proposed.providerName)) return false;
+  if (providerBaseName(slot.providerName) !== providerBaseName(proposed.providerName)) return false;
   const a = slotJstDate(slot);
   const b = slotJstDate(proposed);
   const dateOk = a === b || a === null || b === null;
@@ -213,7 +225,11 @@ export function computeCandidateDiff(current: CurrentEventState, candidate: Norm
     eventChanges.push({ field: "venueName", before: current.venueName, after: ev.venueName });
   }
   const proposedStatus = proposedBroadcastInfoStatus(candidate);
-  if (proposedStatus && proposedStatus !== current.broadcastInfoStatus) {
+  // 確認済みの大会を「未発表」に戻す提案はしない。情報源ごとに収集するため、ある情報源に
+  // 「未定」「決まり次第」とあっても、別の情報源で確認した放送予定を否定する根拠にはならない
+  // （実在の公式ページで、別番組についての「詳細が決まり次第ご案内」から格下げが提案された）。
+  const isDowngradeToNotAnnounced = current.broadcastInfoStatus === "CONFIRMED" && proposedStatus === "NOT_ANNOUNCED";
+  if (proposedStatus && proposedStatus !== current.broadcastInfoStatus && !isDowngradeToNotAnnounced) {
     eventChanges.push({ field: "broadcastInfoStatus", before: current.broadcastInfoStatus, after: proposedStatus });
   }
 

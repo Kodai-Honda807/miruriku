@@ -218,6 +218,21 @@ describe("collectSource（実行しない・失敗する場合）", () => {
     expect(await publicSnapshot()).toEqual(before);
   });
 
+  it("何も抽出できなかったときは候補を作らず、実行は成功として記録する", async () => {
+    const before = await publicSnapshot();
+    const provider = providerReturning({ broadcastStatus: "UNKNOWN", broadcasts: [] });
+    const result = await collectSource(prisma, DEMO_SOURCE_ID, {
+      ...fixtureOptions,
+      providerId: provider.id,
+      providers: registryWith(provider),
+    });
+    expect(result).toMatchObject({ outcome: "SUCCEEDED", candidateId: null, nothingExtracted: true });
+    const run = await prisma.collectionRun.findUniqueOrThrow({ where: { id: result.runId! } });
+    expect(run.status).toBe("SUCCEEDED");
+    expect(await prisma.extractionCandidate.count()).toBe(0);
+    expect(await publicSnapshot()).toEqual(before);
+  });
+
   it("プロバイダの例外は PROVIDER_FAILED", async () => {
     const provider = providerReturning(() => {
       throw new Error("model unavailable");

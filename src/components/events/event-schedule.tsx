@@ -6,7 +6,7 @@ import { countryNameJa, isOverseas, type EventScheduleView } from "./event-forma
 
 /**
  * 開催日・競技開始時刻の要約（一覧カード用）。
- * 開始時刻が不明なときは「開始時刻未定」を表示し、0:00 などの仮時刻は出さない。
+ * 開始時刻が不明なときは「開始時刻未確認」を表示し、0:00 などの仮時刻は出さない。
  * 海外大会は日本時間の日時と現地日時を併記する。
  */
 export function EventScheduleSummary({ view }: { view: EventScheduleView }) {

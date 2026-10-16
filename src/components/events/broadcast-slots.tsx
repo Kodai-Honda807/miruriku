@@ -117,14 +117,47 @@ function SlotItem({
 
       {slot.note ? <p className="mt-2 text-sm text-muted-foreground">{slot.note}</p> : null}
 
-      {variant === "full" ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          {slot.verifiedAt ? `確認日時: ${formatCheckedAt(slot.verifiedAt, now, { forceYear: true })}` : "確認日時: 記録なし"}
-        </p>
-      ) : null}
+      <SlotProvenance slot={slot} now={now} variant={variant} />
 
       <SlotLinks slot={slot} variant={variant} />
     </li>
+  );
+}
+
+/** 出典の表示名（タイトルがなければホスト名） */
+function sourceLabel(source: NonNullable<PublicBroadcast["source"]>): string {
+  if (source.title) return source.title;
+  try {
+    return new URL(source.url).hostname;
+  } catch {
+    return "出典";
+  }
+}
+
+/**
+ * 出典と確認日時。一覧（compact）でも表示し、情報の根拠と鮮度をカードだけで判断できるようにする。
+ * 出典も確認日時もない枠は、一覧では何も出さない（詳細では「記録なし」と明示する）。
+ */
+function SlotProvenance({ slot, now, variant }: { slot: PublicBroadcast; now: Date; variant: Variant }) {
+  const sourceHref = slot.source ? safeExternalHref(slot.source.url) : null;
+  if (!sourceHref && !slot.verifiedAt && variant === "compact") return null;
+  const checked = slot.verifiedAt
+    ? `確認日時: ${formatCheckedAt(slot.verifiedAt, now, { forceYear: variant === "full" })}`
+    : "確認日時: 記録なし";
+  return (
+    <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="slot-provenance">
+      {slot.source && sourceHref ? (
+        <span>
+          出典:{" "}
+          <ExternalLink href={sourceHref} accessibleName={`出典: ${sourceLabel(slot.source)}`} className="font-normal">
+            {sourceLabel(slot.source)}
+          </ExternalLink>
+        </span>
+      ) : variant === "full" ? (
+        <span>出典: 記録なし</span>
+      ) : null}
+      <span>{checked}</span>
+    </p>
   );
 }
 

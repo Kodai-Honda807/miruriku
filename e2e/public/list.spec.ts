@@ -46,7 +46,11 @@ test.describe("トップページの大会一覧", () => {
     await expect(bay).toContainText("無料");
     await expect(bay).toContainText("ライブ");
     await expect(bay.getByRole("link", { name: /大会公式サイト/ })).toBeVisible();
-    await expect(bay.getByRole("link", { name: /放送案内/ })).toBeVisible();
+    await expect(bay.getByRole("link", { name: /^デモテレビ系列（架空）の放送案内/ })).toBeVisible();
+    // 一覧でも、放送枠ごとに出典と確認日時を確認できる
+    const provenance = bay.getByTestId("slot-provenance");
+    await expect(provenance.getByRole("link", { name: /^出典: 放送案内（デモ）/ })).toBeVisible();
+    await expect(provenance).toContainText("確認日時:");
     // 視聴 URL がない枠に「視聴ページ」を出さない（公式サイトを視聴ページとして偽装しない）
     await expect(bay.getByRole("link", { name: /視聴ページ/ })).toHaveCount(0);
 
@@ -63,7 +67,7 @@ test.describe("トップページの大会一覧", () => {
 
     // 開始時刻不明に仮の 0:00 を出さない
     const road = eventCard(page, "demo-corporate-road");
-    await expect(road).toContainText("開始時刻未定");
+    await expect(road).toContainText("開始時刻未確認");
     await expect(road).not.toContainText("0:00");
 
     // 地域限定・有料

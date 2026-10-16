@@ -44,7 +44,7 @@ export function EventCard({ event, now, headingLevel = "h3" }: EventCardProps) {
           ) : null}
           {event.isDemo ? <DemoBadge /> : null}
         </div>
-        <Heading id={headingId} className="text-lg leading-snug font-bold text-balance sm:text-xl">
+        <Heading id={headingId} className="text-lg leading-snug font-bold text-pretty [word-break:normal] sm:text-xl">
           {event.name}
         </Heading>
         <EventVenueLine event={event} />

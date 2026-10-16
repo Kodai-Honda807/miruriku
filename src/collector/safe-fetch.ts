@@ -82,8 +82,15 @@ function headerValue(headers: Record<string, string | string[] | undefined>, nam
   return value ?? null;
 }
 
-function discardBody(body: Dispatcher.ResponseData["body"]): void {
+/**
+ * 読まない本文を破棄する。
+ * undici の BodyReadable は destroy() で RequestAbortedError を 'error' イベントとして発行するため、
+ * リスナーがないとプロセスが異常終了する（実サイトの 404 の robots.txt やリダイレクト応答で発生）。
+ * 破棄に伴うエラーは想定どおりなので、先に握りつぶすリスナーを付けてから破棄する。
+ */
+export function discardBody(body: Pick<Dispatcher.ResponseData["body"], "on" | "destroy">): void {
   try {
+    body.on("error", () => {});
     body.destroy();
   } catch {
     // 破棄の失敗は無視する

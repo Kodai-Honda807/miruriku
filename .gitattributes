@@ -1,0 +1,4 @@
+# シェルスクリプトは常に LF（Windows 側で clone しても WSL で実行できるように）
+*.sh text eol=lf
+deploy/Caddyfile text eol=lf
+deploy/.env.example text eol=lf

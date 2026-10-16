@@ -73,7 +73,7 @@ describe("buildEventScheduleView", () => {
       NOW,
     );
     expect(view.labels.startTimeLabel).toBeNull();
-    expect(view.labels.startTimeUnknownLabel).toBe("開始時刻未定");
+    expect(view.labels.startTimeUnknownLabel).toBe("開始時刻未確認");
     expect(view.withYear).toBe(false);
   });
 });

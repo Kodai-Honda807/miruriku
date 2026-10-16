@@ -123,7 +123,7 @@ export function formatEventSchedule(
       dateLabel: formatLocalDateRangeJa(timing.localStartDate, timing.localEndDate, { withYear }),
       dateBasisLabel: "日本時間",
       startTimeLabel: timing.jstStart ? formatTimeJa(timing.jstStart.time) : null,
-      startTimeUnknownLabel: timing.startTimeKnown ? null : "開始時刻未定",
+      startTimeUnknownLabel: timing.startTimeKnown ? null : "開始時刻未確認",
       localLabel: null,
     };
   }
@@ -147,7 +147,7 @@ export function formatEventSchedule(
     dateLabel: localRange,
     dateBasisLabel: "現地日付",
     startTimeLabel: null,
-    startTimeUnknownLabel: "開始時刻未定（日本時間の日付は変わる場合があります）",
+    startTimeUnknownLabel: "開始時刻未確認（日本時間の日付は変わる場合があります）",
     localLabel: null,
   };
 }
@@ -161,7 +161,7 @@ export type BroadcastTimingInput = {
 
 /**
  * 放送・配信枠の日時表示（日本時間）。
- * 例: "10月12日（月）7:50〜14:00"、"10月12日（月）時刻未定"、"日時未定"
+ * 例: "10月12日（月）7:50〜14:00"、"10月12日（月）時刻未確認"、"日時未確認"
  */
 export function formatBroadcastTiming(
   input: BroadcastTimingInput,
@@ -179,9 +179,9 @@ export function formatBroadcastTiming(
     return `${startLabel}〜${endLabel}`;
   }
   if (input.airDate) {
-    return `${formatLocalDateJa(input.airDate, opts)}時刻未定`;
+    return `${formatLocalDateJa(input.airDate, opts)}時刻未確認`;
   }
-  return "日時未定";
+  return "日時未確認";
 }
 
 /** 放送・配信枠の日本時間の日付（並び替え・表示用）。不明なら null */

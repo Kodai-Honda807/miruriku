@@ -52,3 +52,6 @@ next-env.d.ts
 
 # next dev の出力先を分けた場合（NEXT_DIST_DIR）
 /.next-*/
+
+# デプロイ: 手元に保存した DB のダンプ（deploy/ops.sh backup）
+/deploy/backups/

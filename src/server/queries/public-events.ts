@@ -53,6 +53,8 @@ const broadcastSelect = {
   infoUrl: true,
   verificationStatus: true,
   verifiedAt: true,
+  // 出典として公開するのは URL とタイトルだけ（メモ・収集設定は返さない）
+  source: { select: { url: true, title: true } },
 } satisfies Prisma.BroadcastSlotSelect;
 
 /** 公開済みの放送枠のみ。表示順（sortOrder → 開始時刻 → 作成順） */
@@ -129,6 +131,7 @@ function toPublicBroadcast(row: BroadcastRow): PublicBroadcast {
     infoUrl: row.infoUrl,
     verificationStatus: row.verificationStatus,
     verifiedAt: row.verifiedAt,
+    source: row.source ? { url: row.source.url, title: row.source.title } : null,
   };
 }
 

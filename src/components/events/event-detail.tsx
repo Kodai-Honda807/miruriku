@@ -64,11 +64,11 @@ export function buildEventNotes(event: PublicEventDetail, timing: EventTiming): 
   if (!timing.startTimeKnown) {
     notes.push(
       timing.isJapanTime
-        ? "競技の開始時刻は未定です。"
-        : "競技の開始時刻は未定です。開始時刻によっては、日本時間の日付が現地の日付と変わる場合があります。",
+        ? "競技の開始時刻は確認できていません。"
+        : "競技の開始時刻は確認できていません。開始時刻によっては、日本時間の日付が現地の日付と変わる場合があります。",
     );
   } else if (event.sessions.some((s) => s.startAt === null)) {
-    notes.push("開始時刻が未定の日程があります。");
+    notes.push("開始時刻を確認できていない日程があります。");
   }
   if (timing.jstDateDiffersFromLocal) {
     notes.push("この大会は、日本時間の日付が現地の日付と異なります。");
@@ -100,14 +100,14 @@ const dlClass = "grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm";
 const dtClass = "text-muted-foreground";
 
 function sessionJstLabel(session: PublicSession, isJapanTime: boolean, now: Date): string {
-  if (!session.startAt) return "未定";
+  if (!session.startAt) return "未確認";
   if (isJapanTime) return formatTimeJa(toZonedParts(session.startAt, JST).time);
   const jstDate = toZonedParts(session.startAt, JST).date;
   return formatInstantJst(session.startAt, { withYear: shouldShowYear(jstDate, now) });
 }
 
 function sessionLocalLabel(session: PublicSession, timezone: string, now: Date): string {
-  if (!session.startAt) return "未定";
+  if (!session.startAt) return "未確認";
   const local = toZonedParts(session.startAt, timezone);
   return `${formatLocalDateJa(local.date, { withYear: shouldShowYear(local.date, now) })}${formatTimeJa(local.time)}`;
 }
@@ -200,7 +200,7 @@ export function EventDetail({ event, now }: Props) {
           {event.editionLabel ? <span className="text-sm text-muted-foreground">{event.editionLabel}</span> : null}
           {event.isDemo ? <DemoBadge /> : null}
         </div>
-        <h1 className="text-2xl leading-snug font-bold text-balance sm:text-3xl">{event.name}</h1>
+        <h1 className="text-2xl leading-snug font-bold text-pretty [word-break:normal] sm:text-3xl">{event.name}</h1>
         {event.description ? <p className="text-sm text-foreground sm:text-base">{event.description}</p> : null}
       </header>
 
