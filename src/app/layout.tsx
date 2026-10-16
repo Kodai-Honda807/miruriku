@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 
+import { GoogleAnalytics } from "@/components/site/analytics";
 import { SITE_CATCHPHRASE, SITE_DESCRIPTION, SITE_NAME } from "@/components/site/site-header";
 
 import "./globals.css";
@@ -26,11 +27,15 @@ export const viewport: Viewport = {
  * ルートレイアウト。公開ページのヘッダー・フッターは各ページの SiteShell で描画する
  * （/admin など別系統の画面に公開用の枠を出さないため）。
  * フォントは next/font を使わず、日本語のシステムフォント（globals.css）を使う。
+ * Google アナリティクスは本番ビルドのときだけ読み込む（src/components/site/analytics.tsx）。
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja" className="h-full antialiased">
-      <body className="flex min-h-full flex-col bg-background text-foreground">{children}</body>
+      <body className="flex min-h-full flex-col bg-background text-foreground">
+        {children}
+        <GoogleAnalytics />
+      </body>
     </html>
   );
 }
