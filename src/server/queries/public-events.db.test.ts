@@ -11,7 +11,12 @@ import type { PrismaClient } from "@/generated/prisma/client";
 
 import { seedDemoData } from "../../../prisma/demo-seed";
 import { createTestPrisma, resetDatabase } from "../../../test/db";
-import { LIST_LOOKBACK_DAYS, getPublicEventDetailFrom, listPublicEventsFrom } from "./public-events";
+import {
+  LIST_LOOKBACK_DAYS,
+  getPublicEventDetailFrom,
+  listPublicEventsFrom,
+  listSitemapEventSlugsFrom,
+} from "./public-events";
 
 const BASE_DATE = "2026-10-10";
 /** 基準日の日本時間 12:00 */
@@ -235,5 +240,40 @@ describe("getPublicEventDetailFrom", () => {
   it("終了済みでも公開中の大会の詳細は返す", async () => {
     const detail = await getPublicEventDetailFrom(prisma, "demo-autumn-relay");
     expect(detail?.name).toBe("みる陸デモ秋季リレーマラソン（終了）");
+  });
+});
+
+describe("listSitemapEventSlugsFrom", () => {
+  it("公開中の実在の大会だけを返す（下書き・デモは除き、終了済みは含める）", async () => {
+    const series = await prisma.eventSeries.create({ data: { slug: "sitemap-series", name: "サイトマップ" } });
+    const base = {
+      seriesId: series.id,
+      seasonYear: 2026,
+      category: "MARATHON" as const,
+      timezone: JST,
+      countryCode: "JP",
+      isDemo: false,
+    };
+    const created = await Promise.all([
+      prisma.event.create({
+        data: { ...base, slug: "sitemap-real", name: "実在", status: "PUBLISHED",
+          startDate: localDateToDbDate("2026-11-01"), endDate: localDateToDbDate("2026-11-01") },
+      }),
+      prisma.event.create({
+        data: { ...base, slug: "sitemap-past", name: "終了済み", status: "PUBLISHED",
+          startDate: localDateToDbDate("2025-01-02"), endDate: localDateToDbDate("2025-01-03") },
+      }),
+      prisma.event.create({
+        data: { ...base, slug: "sitemap-draft", name: "下書き", status: "DRAFT",
+          startDate: localDateToDbDate("2026-11-02"), endDate: localDateToDbDate("2026-11-02") },
+      }),
+    ]);
+    try {
+      const slugs = await listSitemapEventSlugsFrom(prisma);
+      expect(slugs).toEqual(["sitemap-real", "sitemap-past"]); // 開催日の新しい順。デモ大会は含まない
+    } finally {
+      await prisma.event.deleteMany({ where: { id: { in: created.map((e) => e.id) } } });
+      await prisma.eventSeries.delete({ where: { id: series.id } });
+    }
   });
 });

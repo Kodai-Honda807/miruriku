@@ -212,6 +212,23 @@ export async function getPublicEventDetailFrom(db: PublicQueryDb, slug: string):
 }
 
 /** 公開中の大会一覧（絞り込み・並び替えは呼び出し側で filterAndSortEvents を使う） */
+/**
+ * サイトマップ用: 公開中の大会の slug（終了した大会も含む。デモ大会は検索エンジンに出さないため除く）。
+ * 更新日時は返さない（実データの反映のたびに DB の updatedAt が変わり、実際の更新日を表さないため）。
+ */
+export async function listSitemapEventSlugsFrom(db: PublicQueryDb): Promise<string[]> {
+  const rows = await db.event.findMany({
+    where: { status: "PUBLISHED", isDemo: false },
+    orderBy: [{ startDate: "desc" }, { slug: "asc" }],
+    select: { slug: true },
+  });
+  return rows.map((row) => row.slug);
+}
+
+export function listSitemapEventSlugs(): Promise<string[]> {
+  return listSitemapEventSlugsFrom(getPrisma());
+}
+
 export function listPublicEvents(now: Date): Promise<PublicEventSummary[]> {
   return listPublicEventsFrom(getPrisma(), now);
 }

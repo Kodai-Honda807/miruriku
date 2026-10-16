@@ -48,6 +48,9 @@ RUN --mount=type=cache,id=miruriku-pnpm-store,target=/pnpm/store \
 # builder: next build（DB 接続なし。DATABASE_URL は設定しない）
 # ---------------------------------------------------------------------------
 FROM base AS builder
+# 公開サイトの URL（canonical・OGP の絶対 URL に使う。ビルド時に埋め込まれる）。未指定なら絶対 URL を出さない
+ARG MIRURIKU_SITE_URL=""
+ENV MIRURIKU_SITE_URL=${MIRURIKU_SITE_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 COPY --from=deps /app/src/generated ./src/generated

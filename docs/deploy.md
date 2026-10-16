@@ -107,6 +107,17 @@ Lightsail でタグを付けられるリソースの種類は [Lightsail のタ�
 
 請求額をタグで分けて見たい場合は、Billing and Cost Management の「コスト配分タグ」で `project` を有効にします（有効にした時点以降の利用分から反映されます）。
 
+## 検索エンジン向けの設定（SEO）
+
+- 公開 URL は `MIRURIKU_SITE_URL`（`https://<DOMAIN>`）として、ビルド時（canonical・OGP）と実行時（サイトマップ）の両方に自動で渡します。未設定なら絶対 URL を出しません。
+- 出しているもの: ページごとのタイトルと説明文、canonical（絞り込み条件付きの URL は `/` にまとめる）、OGP / X カード、`robots.txt`（`/admin` と `/api/` を除外）、`sitemap.xml`（公開中の実在の大会。デモ大会は除外）、大会詳細の構造化データ（schema.org `SportsEvent`）、トップの `WebSite`、アイコン一式とマニフェスト。
+- デモ（架空）の大会と、存在しないページは `noindex` です。
+- 公開後に行うこと（任意）:
+  1. [Google Search Console](https://search.google.com/search-console) にプロパティを追加し、所有権を確認する（sslip.io では DNS で確認できないため「URL プレフィックス」+「HTML タグ」を使う。確認用のタグはコードに追加が必要）
+  2. `https://<DOMAIN>/sitemap.xml` を送信する
+  3. [リッチリザルト テスト](https://search.google.com/test/rich-results) で大会詳細ページの構造化データを確認する
+- URL（ドメイン）が変わると、それまでの検索エンジンの評価は引き継がれにくくなります。静的配信への移行などで URL を変える予定があるなら、先に独自ドメインを決めておくのが確実です。
+
 ## アクセス解析（Google アナリティクス）
 
 - 測定 ID `G-72DVD655JY` の GA4 タグ（gtag.js）を、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
