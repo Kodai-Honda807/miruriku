@@ -1,0 +1,31 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MirurikuLightsailDeploy",
+      "Effect": "Allow",
+      "Action": [
+        "lightsail:GetBundles",
+        "lightsail:GetBlueprints",
+        "lightsail:GetInstance",
+        "lightsail:CreateInstances",
+        "lightsail:DeleteInstance",
+        "lightsail:TagResource",
+        "lightsail:GetKeyPair",
+        "lightsail:ImportKeyPair",
+        "lightsail:DeleteKeyPair",
+        "lightsail:GetStaticIp",
+        "lightsail:AllocateStaticIp",
+        "lightsail:AttachStaticIp",
+        "lightsail:ReleaseStaticIp",
+        "lightsail:PutInstancePublicPorts",
+        "lightsail:EnableAddOn",
+        "lightsail:GetOperation",
+        "lightsail:GetInstances",
+        "lightsail:GetKeyPairs",
+        "lightsail:GetAutoSnapshots"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

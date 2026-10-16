@@ -1,0 +1,27 @@
+# みる陸 本番用の Caddy 設定（HTTPS 終端・リバースプロキシ）。
+# 証明書は Let's Encrypt から自動で取得・更新する（80/443 番ポートの公開が必要）。
+{$DOMAIN} {
+	encode zstd gzip
+
+	# 管理画面は本番では常に無効（アプリ側でも 404）。念のためプロキシでも遮断する
+	@admin path /admin /admin/*
+	respond @admin "Not Found" 404
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	reverse_proxy web:3000 {
+		# Suspense のストリーミングをバッファリングせずにすぐ送る
+		flush_interval -1
+	}
+}
+
+# IP アドレスなど、ほかの名前で HTTP アクセスされた場合はドメインの HTTPS へ転送する
+http:// {
+	redir https://{$DOMAIN}{uri} permanent
+}

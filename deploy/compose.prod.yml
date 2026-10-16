@@ -1,0 +1,90 @@
+# みる陸 本番用の Docker Compose（Lightsail インスタンス 1 台で動かす構成）。
+# deploy/deploy.sh がサーバー上で使う。ローカル開発用はリポジトリ直下の docker-compose.yml。
+#
+#   web    … Next.js（Dockerfile の runner）。外部には公開せず、caddy からだけ接続する
+#   caddy  … HTTPS の終端（Let's Encrypt で証明書を自動取得）。/admin は常に 404 を返す
+#   db     … PostgreSQL。ポートは公開しない（同じ Docker ネットワーク内からだけ接続できる）
+#   migrate / tools … 1 回だけ実行するタスク（profiles: tasks。up では起動しない）
+#
+# 環境変数は /opt/miruriku/shared/secrets.env（DB パスワード。サーバー上で生成）と
+# /opt/miruriku/shared/settings.env（ドメインなど。deploy.sh が毎回書き出す）から読み込む。
+name: miruriku
+
+x-database-url: &database-url "postgresql://miruriku:${POSTGRES_PASSWORD:?secrets.env に POSTGRES_PASSWORD がありません}@db:5432/miruriku?schema=public"
+
+services:
+  db:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: miruriku
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?secrets.env に POSTGRES_PASSWORD がありません}
+      POSTGRES_DB: miruriku
+    volumes:
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miruriku -d miruriku"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: ..
+      target: runner
+    image: miruriku-web:${RELEASE:-latest}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?settings.env に DOMAIN がありません}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+
+  migrate:
+    build:
+      context: ..
+      target: migrate
+    image: miruriku-migrate:${RELEASE:-latest}
+    profiles: ["tasks"]
+    environment:
+      DATABASE_URL: *database-url
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 収集 CLI（既定のエントリポイント）と、実在データの反映（--entrypoint で tsx を指定）に使う
+  tools:
+    build:
+      context: ..
+      target: collector
+    image: miruriku-tools:${RELEASE:-latest}
+    profiles: ["tasks"]
+    environment:
+      DATABASE_URL: *database-url
+      COLLECTOR_USER_AGENT: ${COLLECTOR_USER_AGENT:-mirurikuBot/0.1}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  caddy-data:
+  caddy-config:
