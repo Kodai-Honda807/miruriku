@@ -29,6 +29,11 @@ for (const width of WIDTHS) {
     test("長い大会名・局名でも崩れない", async ({ page }) => {
       await page.goto("/");
       await expect(eventCards(page).first()).toBeVisible();
+      // ハイドレーション前に DOM を書き換えると React が木を作り直すため、完了を待ってから差し替える
+      await page.waitForFunction(() => {
+        const form = document.querySelector('form[role="search"]');
+        return !!form && Object.keys(form).some((k) => k.startsWith("__reactFiber"));
+      });
       // 実データにない長さ（空白なしの長い英数字を含む）を入れて、折り返しを確かめる
       await page.evaluate(() => {
         const card = document.querySelector('[data-testid="event-card"]')!;
