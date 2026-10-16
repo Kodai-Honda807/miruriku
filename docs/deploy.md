@@ -86,7 +86,7 @@ aws sso login --profile miruriku   # SSO の場合。セッションが切れて
 
 ## アクセス解析（Google アナリティクス）
 
-- 測定 ID `G-E17SENSEG0` の GA4 タグを、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
+- 測定 ID `G-81X7PN4D1S` の GA4 タグを、本番ビルドのときだけ読み込みます（`src/components/site/analytics.tsx`）。開発サーバー・テスト・E2E では読み込みません。
 - 絞り込みの変更や詳細ページへの移動は、GA4 の「拡張計測機能」の「ブラウザの履歴イベントに基づくページの変更」（既定で有効）でページビューになります。
 
 ## うまくいかないとき
