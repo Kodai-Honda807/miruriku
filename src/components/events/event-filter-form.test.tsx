@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_FILTERS, type EventFilters } from "@/domain/filters";
 
-import { EventFilterForm, type PeriodOption } from "./event-filter-form";
+import { EventFilterForm, FILTER_DIALOG_ID, type PeriodOption } from "./event-filter-form";
 
 const replace = vi.fn();
 
@@ -22,6 +22,20 @@ function renderForm(filters: Partial<EventFilters> = {}) {
   return render(<EventFilterForm filters={{ ...DEFAULT_FILTERS, ...filters }} periodOptions={PERIOD_OPTIONS} />);
 }
 
+function dialog() {
+  return screen.getByTestId("filter-dialog") as HTMLDialogElement;
+}
+
+function trigger() {
+  return screen.getByRole("button", { name: /^絞り込み/ });
+}
+
+async function openDialog(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(trigger());
+  expect(dialog().open).toBe(true);
+  return within(dialog());
+}
+
 beforeEach(() => {
   replace.mockClear();
 });
@@ -37,83 +51,89 @@ describe("EventFilterForm: E2E 用の契約とプログレッシブエンハン�
     expect(screen.getByRole("button", { name: "検索" })).toHaveAttribute("type", "submit");
   });
 
-  it("期間・競技・視聴方法の fieldset と、各ラベルのネイティブな入力を持つ", () => {
+  it("ダイアログもフォームの内側にあり、競技・視聴方法・無料ネット配信の入力が GET で送信される", () => {
+    renderForm();
+    const form = screen.getByRole("search", { name: "大会の絞り込み" });
+    const d = dialog();
+    expect(d.tagName).toBe("DIALOG");
+    expect(form).toContainElement(d);
+    // 閉じていてもフォームの入力として送信される（JavaScript なしでも条件が保たれる）
+    expect(d.querySelectorAll('input[name="category"]')).toHaveLength(3);
+    expect(d.querySelectorAll('input[name="medium"]')).toHaveLength(5);
+    expect(d.querySelector('input[name="free"]')).toHaveAttribute("value", "1");
+    // 対応ブラウザでは JavaScript なしでも開閉できる（Invoker Commands）
+    expect(trigger()).toHaveAttribute("commandfor", FILTER_DIALOG_ID);
+    expect(trigger()).toHaveAttribute("command", "show-modal");
+    expect(within(d).getByRole("button", { name: "適用", hidden: true })).toHaveAttribute("type", "submit");
+  });
+
+  it("通常画面には検索・期間・絞り込みボタンだけを置き、ダイアログは閉じている", () => {
     renderForm();
     const period = screen.getByRole("group", { name: "期間" });
     expect(within(period).getAllByRole("radio").map((r) => r.getAttribute("value"))).toEqual(["today", "week", "upcoming"]);
     for (const label of ["今日", "今週（7日間）", "この先"]) {
       expect(within(period).getByLabelText(label)).toHaveAttribute("name", "period");
     }
+    expect(trigger()).toHaveAttribute("aria-haspopup", "dialog");
+    expect(dialog().open).toBe(false);
+  });
 
-    const category = screen.getByRole("group", { name: "競技" });
-    expect(within(category).getAllByRole("checkbox")).toHaveLength(3);
+  it("ダイアログに競技・視聴方法の fieldset と無料ネット配信ありを置く", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    const d = await openDialog(user);
+    expect(dialog()).toHaveAccessibleName("絞り込み");
+    const category = d.getByRole("group", { name: "競技" });
     for (const label of ["駅伝", "マラソン", "トラック"]) {
       expect(within(category).getByLabelText(label)).toHaveAttribute("name", "category");
     }
-
-    const medium = screen.getByRole("group", { name: "視聴方法" });
-    expect(within(medium).getAllByRole("checkbox")).toHaveLength(5);
+    const medium = d.getByRole("group", { name: "視聴方法" });
     for (const label of ["地上波", "BS", "CS", "ネット配信", "ラジオ"]) {
       expect(within(medium).getByLabelText(label)).toHaveAttribute("name", "medium");
     }
-
-    const free = screen.getByRole("checkbox", { name: "無料ネット配信あり" });
-    expect(free).toHaveAttribute("name", "free");
-    expect(free).toHaveAttribute("value", "1");
+    expect(d.getByRole("checkbox", { name: "無料ネット配信あり" })).toHaveAccessibleDescription(
+      /無料で見られるネット配信の枠がある大会だけ/,
+    );
   });
 
-  it("期間の選択肢に実際の日付範囲を説明として関連付ける", () => {
-    renderForm();
+  it("期間の選択肢に実際の日付範囲を説明として関連付け、選択中の範囲を表示する", () => {
+    renderForm({ period: "week" });
     expect(screen.getByRole("radio", { name: "今週（7日間）" })).toHaveAccessibleDescription(
       "10月10日（土）〜10月16日（金）",
     );
     expect(screen.getByRole("radio", { name: "今日" })).toHaveAccessibleDescription("10月10日（土）");
-    expect(screen.getByText("10月10日（土）〜10月16日（金）")).toBeVisible();
+    expect(screen.getByTestId("selected-period-range")).toHaveTextContent("10月10日（土）〜10月16日（金）");
   });
 
-  it("URL から読み取った条件を選択状態に反映する", () => {
+  it("URL から読み取った条件を選択状態に反映する", async () => {
+    const user = userEvent.setup();
     renderForm({ period: "week", categories: ["EKIDEN"], media: ["BS", "INTERNET"], freeInternet: true, q: "湾岸" });
     expect(screen.getByRole("radio", { name: "今週（7日間）" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "この先" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "駅伝" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "マラソン" })).not.toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "BS" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "ネット配信" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "無料ネット配信あり" })).toBeChecked();
     expect(screen.getByLabelText("大会名で検索")).toHaveValue("湾岸");
+
+    const d = await openDialog(user);
+    expect(d.getByRole("checkbox", { name: "駅伝" })).toBeChecked();
+    expect(d.getByRole("checkbox", { name: "マラソン" })).not.toBeChecked();
+    expect(d.getByRole("checkbox", { name: "BS" })).toBeChecked();
+    expect(d.getByRole("checkbox", { name: "ネット配信" })).toBeChecked();
+    expect(d.getByRole("checkbox", { name: "無料ネット配信あり" })).toBeChecked();
   });
 
-  it("既定の条件では「条件をクリア」を出さない", () => {
+  it("既定の条件では「条件をクリア」も適用中の条件も出さない", () => {
     renderForm();
     expect(screen.queryByRole("link", { name: "条件をクリア" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("active-filters")).not.toBeInTheDocument();
+    expect(trigger()).toHaveAccessibleName("絞り込み");
   });
 });
 
-describe("EventFilterForm: JavaScript 有効時の自動更新", () => {
-  it("チェックボックスの変更で URL クエリを router.replace で更新する", async () => {
-    const user = userEvent.setup();
-    renderForm();
-    await user.click(screen.getByRole("checkbox", { name: "駅伝" }));
-    expect(replace).toHaveBeenLastCalledWith("/?category=ekiden", { scroll: false });
-  });
-
-  it("期間・視聴方法・無料ネット配信の変更も既存の条件を保ったまま反映する", async () => {
+describe("EventFilterForm: 期間と検索語", () => {
+  it("期間の変更はすぐに URL クエリへ反映し、既存の条件を保つ", async () => {
     const user = userEvent.setup();
     renderForm({ categories: ["TRACK"] });
     await user.click(screen.getByRole("radio", { name: "今日" }));
     expect(replace).toHaveBeenLastCalledWith("/?period=today&category=track", { scroll: false });
-
-    replace.mockClear();
-    await user.click(screen.getByRole("checkbox", { name: "無料ネット配信あり" }));
-    expect(replace).toHaveBeenLastCalledWith(expect.stringContaining("free=1"), { scroll: false });
-    expect(replace.mock.calls[0]![0]).toContain("category=track");
-  });
-
-  it("チェックを外すとその条件をクエリから除く", async () => {
-    const user = userEvent.setup();
-    renderForm({ media: ["TERRESTRIAL", "BS"] });
-    await user.click(screen.getByRole("checkbox", { name: "地上波" }));
-    expect(replace).toHaveBeenLastCalledWith("/?medium=bs", { scroll: false });
   });
 
   it("検索語は Enter / 検索ボタンで反映し、入力中には更新しない", async () => {
@@ -130,6 +150,21 @@ describe("EventFilterForm: JavaScript 有効時の自動更新", () => {
     expect(replace).toHaveBeenCalledTimes(1);
   });
 
+  it("入力中の検索語は、期間の切替・ダイアログの適用のときにも合わせて反映する（コメントの仕様どおり）", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await user.type(screen.getByLabelText("大会名で検索"), "駅伝");
+    await user.click(screen.getByRole("radio", { name: "今週（7日間）" }));
+    expect(replace).toHaveBeenLastCalledWith(`/?period=week&q=${encodeURIComponent("駅伝")}`, { scroll: false });
+
+    replace.mockClear();
+    const d = await openDialog(user);
+    await user.click(d.getByRole("checkbox", { name: "BS" }));
+    await user.click(d.getByRole("button", { name: "適用" }));
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls[0]![0]).toContain(`q=${encodeURIComponent("駅伝")}`);
+  });
+
   it("「条件をクリア」で既定の条件に戻す", async () => {
     const user = userEvent.setup();
     renderForm({ period: "today", categories: ["EKIDEN"], q: "テスト" });
@@ -138,5 +173,100 @@ describe("EventFilterForm: JavaScript 有効時の自動更新", () => {
     await user.click(clear);
     expect(replace).toHaveBeenLastCalledWith("/", { scroll: false });
     expect(screen.getByLabelText("大会名で検索")).toHaveValue("");
+  });
+});
+
+describe("EventFilterForm: 絞り込みダイアログ", () => {
+  it("ダイアログ内の変更は「適用」までは反映せず、適用でまとめて 1 回だけ反映する", async () => {
+    const user = userEvent.setup();
+    renderForm({ period: "week" });
+    const d = await openDialog(user);
+    await user.click(d.getByRole("checkbox", { name: "駅伝" }));
+    await user.click(d.getByRole("checkbox", { name: "地上波" }));
+    await user.click(d.getByRole("checkbox", { name: "無料ネット配信あり" }));
+    expect(replace).not.toHaveBeenCalled();
+
+    await user.click(d.getByRole("button", { name: "適用" }));
+    expect(replace).toHaveBeenCalledTimes(1);
+    expect(replace).toHaveBeenLastCalledWith("/?period=week&category=ekiden&medium=terrestrial&free=1", {
+      scroll: false,
+    });
+    expect(dialog().open).toBe(false);
+  });
+
+  it("「キャンセル」では変更を破棄し、次に開いたときは適用中の条件に戻っている", async () => {
+    const user = userEvent.setup();
+    renderForm({ media: ["BS"] });
+    let d = await openDialog(user);
+    await user.click(d.getByRole("checkbox", { name: "駅伝" }));
+    await user.click(d.getByRole("checkbox", { name: "BS" }));
+    await user.click(d.getByRole("button", { name: "キャンセル" }));
+    expect(replace).not.toHaveBeenCalled();
+    expect(dialog().open).toBe(false);
+
+    d = await openDialog(user);
+    expect(d.getByRole("checkbox", { name: "駅伝" })).not.toBeChecked();
+    expect(d.getByRole("checkbox", { name: "BS" })).toBeChecked();
+  });
+
+  it("閉じるボタンでも変更を破棄する", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    const d = await openDialog(user);
+    await user.click(d.getByRole("checkbox", { name: "トラック" }));
+    await user.click(d.getByRole("button", { name: "閉じる（変更を破棄）" }));
+    expect(replace).not.toHaveBeenCalled();
+    expect(dialog().open).toBe(false);
+  });
+
+  it("閉じたあとは絞り込みボタンにフォーカスを戻す", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    const d = await openDialog(user);
+    await user.click(d.getByRole("button", { name: "キャンセル" }));
+    expect(trigger()).toHaveFocus();
+  });
+
+  it("「すべて外す」はダイアログ内の選択だけを外し、適用で反映する", async () => {
+    const user = userEvent.setup();
+    renderForm({ categories: ["EKIDEN"], media: ["CS"], q: "駅伝" });
+    const d = await openDialog(user);
+    await user.click(d.getByRole("button", { name: "すべて外す" }));
+    expect(d.getByRole("checkbox", { name: "駅伝" })).not.toBeChecked();
+    expect(replace).not.toHaveBeenCalled();
+    await user.click(d.getByRole("button", { name: "適用" }));
+    expect(replace).toHaveBeenLastCalledWith(`/?q=${encodeURIComponent("駅伝")}`, { scroll: false });
+  });
+
+  it("背景（ダイアログ要素そのもの）のクリックはキャンセル扱い", async () => {
+    const user = userEvent.setup();
+    renderForm();
+    const d = await openDialog(user);
+    await user.click(d.getByRole("checkbox", { name: "駅伝" }));
+    await user.click(dialog());
+    expect(dialog().open).toBe(false);
+    expect(replace).not.toHaveBeenCalled();
+  });
+});
+
+describe("EventFilterForm: 適用中の追加条件", () => {
+  it("適用中の条件を表示し、件数を絞り込みボタンで伝える", () => {
+    renderForm({ categories: ["EKIDEN"], media: ["INTERNET"], freeInternet: true });
+    const list = screen.getByRole("list", { name: "適用中の絞り込み条件" });
+    expect(within(list).getAllByRole("link").map((a) => a.textContent)).toEqual(["駅伝", "ネット配信", "無料ネット配信あり"]);
+    expect(trigger()).toHaveAccessibleName("絞り込み（3件適用中）");
+  });
+
+  it("条件ごとに個別に外せる（リンク先はその条件を除いた URL）", async () => {
+    const user = userEvent.setup();
+    renderForm({ period: "today", categories: ["EKIDEN", "TRACK"], freeInternet: true });
+    const remove = screen.getByRole("link", { name: "「駅伝」の条件を外す" });
+    expect(remove).toHaveAttribute("href", "/?period=today&category=track&free=1");
+    expect(screen.getByRole("link", { name: "「無料ネット配信あり」の条件を外す" })).toHaveAttribute(
+      "href",
+      "/?period=today&category=ekiden&category=track",
+    );
+    await user.click(remove);
+    expect(replace).toHaveBeenLastCalledWith("/?period=today&category=track&free=1", { scroll: false });
   });
 });

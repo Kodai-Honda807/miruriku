@@ -46,17 +46,18 @@ test.describe("トップページの大会一覧", () => {
     await expect(bay).toContainText("無料");
     await expect(bay).toContainText("ライブ");
     await expect(bay.getByRole("link", { name: /大会公式サイト/ })).toBeVisible();
-    await expect(bay.getByRole("link", { name: /^デモテレビ系列（架空）の放送案内/ })).toBeVisible();
-    // 一覧でも、放送枠ごとに出典と確認日時を確認できる
-    const provenance = bay.getByTestId("slot-provenance");
-    await expect(provenance.getByRole("link", { name: /^出典: 放送案内（デモ）/ })).toBeVisible();
-    await expect(provenance).toContainText("確認日時:");
-    // 視聴 URL がない枠に「視聴ページ」を出さない（公式サイトを視聴ページとして偽装しない）
+    // 放送・配信カード全体が 1 つのリンク。視聴 URL がない枠は放送案内へ（公式サイトを視聴ページとして偽装しない）
+    const baySlot = bay.getByRole("link", { name: /^デモテレビ系列（架空） 放送案内へ/ });
+    await expect(baySlot).toBeVisible();
+    await expect(baySlot).toContainText("7:50");
     await expect(bay.getByRole("link", { name: /視聴ページ/ })).toHaveCount(0);
+    // 出典・確認日時は一覧に出さず、詳細ページで確認する
+    await expect(bay.getByTestId("slot-provenance")).toHaveCount(0);
+    await expect(bay).not.toContainText("確認日時");
 
     const night = eventCard(page, "demo-track-night");
     await expect(night).toContainText("ネット配信");
-    await expect(night.getByRole("link", { name: /視聴ページ/ })).toHaveAttribute(
+    await expect(night.getByRole("link", { name: /視聴ページへ/ })).toHaveAttribute(
       "href",
       "https://example.com/miruriku-demo/watch/track-night",
     );

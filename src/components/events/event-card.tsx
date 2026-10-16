@@ -20,7 +20,8 @@ type EventCardProps = {
 
 /**
  * 一覧の大会カード。「いつ・どこで見られるか」をカードだけで判断できるよう、
- * 放送・配信枠の内容を詳細ページに隠さずに表示する。
+ * 大会名・開催日・開始時刻と、放送・配信枠（媒体・局名・日時・条件）を表示する。
+ * 出典・確認日時・補足などの長い説明は詳細ページに任せる（データは削除しない）。
  */
 export function EventCard({ event, now, headingLevel = "h3" }: EventCardProps) {
   const Heading = headingLevel;
@@ -44,7 +45,7 @@ export function EventCard({ event, now, headingLevel = "h3" }: EventCardProps) {
           ) : null}
           {event.isDemo ? <DemoBadge /> : null}
         </div>
-        <Heading id={headingId} className="text-lg leading-snug font-bold text-pretty [word-break:normal] sm:text-xl">
+        <Heading id={headingId} className="text-lg leading-snug font-bold text-pretty break-words [word-break:normal] sm:text-xl">
           {event.name}
         </Heading>
         <EventVenueLine event={event} />

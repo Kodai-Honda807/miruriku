@@ -140,6 +140,10 @@
   h4 {
     word-break: auto-phrase;
   }
+  /* モーダルのダイアログ（絞り込み）を開いている間は、背後のページをスクロールさせない */
+  html:has(dialog[open]:modal) {
+    overflow: hidden;
+  }
   /* キーボード操作時のフォーカスを見えやすくする（個別の指定がない要素向け） */
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
     outline: 2px solid var(--ring);

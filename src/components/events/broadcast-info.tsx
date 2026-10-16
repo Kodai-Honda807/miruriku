@@ -7,17 +7,22 @@ import { BroadcastInfoStatusBadge } from "./status-badges";
 type Props = {
   event: Pick<PublicEventSummary, "broadcastInfoStatus" | "broadcastNote" | "broadcastCheckedAt">;
   now: Date;
-  /** compact: 一覧カード（確認済みのときは説明を省く）、full: 詳細ページ（常に説明を出す） */
+  /**
+   * compact: 一覧カード。状態ラベルだけを出す（「未確認」のときだけ、配信なしと誤解されないよう短い説明を添える）。
+   *          補足（broadcastNote）と確認日時は詳細ページで表示する。
+   * full: 詳細ページ。説明・補足・確認日時をすべて出す。
+   */
   variant: "compact" | "full";
 };
 
 /**
- * 大会全体の放送・配信情報の状態。状態ラベルは常に表示する。
- * 「未確認」は「配信なし」と誤解されないよう、説明文を必ず添える。
+ * 大会全体の放送・配信情報の状態。状態ラベルは一覧・詳細とも常に表示する。
+ * 「未確認」は「配信なし」と誤解されないよう、一覧でも説明文を必ず添える。
  */
 export function BroadcastInfoSummary({ event, now, variant }: Props) {
   const status = event.broadcastInfoStatus;
-  const showDescription = variant === "full" || status !== "CONFIRMED";
+  const isFull = variant === "full";
+  const showDescription = isFull || status === "UNVERIFIED";
   return (
     <div className="flex flex-col gap-1.5" data-testid="broadcast-info-status" data-status={status}>
       <div>
@@ -27,13 +32,11 @@ export function BroadcastInfoSummary({ event, now, variant }: Props) {
       {showDescription ? (
         <p className="text-sm text-muted-foreground">{BROADCAST_INFO_STATUS_DESCRIPTIONS[status]}</p>
       ) : null}
-      {event.broadcastNote ? <p className="text-sm text-foreground">{event.broadcastNote}</p> : null}
-      {event.broadcastCheckedAt ? (
+      {isFull && event.broadcastNote ? <p className="text-sm text-foreground">{event.broadcastNote}</p> : null}
+      {isFull ? (
         <p className="text-xs text-muted-foreground">
-          情報確認: {formatCheckedAt(event.broadcastCheckedAt, now, { forceYear: variant === "full" })}
+          情報確認: {event.broadcastCheckedAt ? formatCheckedAt(event.broadcastCheckedAt, now, { forceYear: true }) : "記録なし"}
         </p>
-      ) : variant === "full" ? (
-        <p className="text-xs text-muted-foreground">情報確認: 記録なし</p>
       ) : null}
     </div>
   );
