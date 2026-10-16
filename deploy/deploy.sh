@@ -49,7 +49,14 @@ release_dir="${REMOTE_BASE}/releases/${release}"
 compose_file="${release_dir}/deploy/compose.prod.yml"
 compose="$(remote_compose_prefix "$compose_file")"
 
+# 独自ドメインは、DNS が静的 IP に向いてから使う（向いていないと HTTPS 証明書を取得できない）
+if [[ -n "$DOMAIN" ]] && ! resolves_to "$domain" "$ip"; then
+  die "${domain} が静的 IP ${ip} に解決されません。Route 53 のホストゾーンに A レコード（${domain} → ${ip}）を作成し、反映されてから実行してください（確認: getent ahostsv4 ${domain}）"
+fi
+redirects="$(redirect_domains "$ip" "$domain")"
+
 info "デプロイ先: ${domain}（${ip}）、コミット ${commit}"
+info "転送元（${domain} へ 301 転送）: ${redirects}"
 
 # --- 1. ソースの転送 ------------------------------------------------------
 info "ソースを転送します（git archive HEAD）"
@@ -64,6 +71,7 @@ quote_env() { printf "'%s'" "${1//\'/}"; }
 {
   printf 'RELEASE=%s\n' "$(quote_env "$release")"
   printf 'DOMAIN=%s\n' "$(quote_env "$domain")"
+  printf 'REDIRECT_DOMAINS=%s\n' "$(quote_env "$redirects")"
   printf 'COLLECTOR_USER_AGENT=%s\n' "$(quote_env "$COLLECTOR_USER_AGENT")"
 } | remote "$ip" "umask 077; cat > '${REMOTE_BASE}/shared/settings.env'"
 

@@ -51,6 +51,7 @@ services:
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN:?settings.env に DOMAIN がありません}
+      REDIRECT_DOMAINS: ${REDIRECT_DOMAINS:?settings.env に REDIRECT_DOMAINS がありません}
     ports:
       - "80:80"
       - "443:443"
