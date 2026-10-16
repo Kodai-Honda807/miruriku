@@ -107,9 +107,22 @@ ip="$(static_ip)"
 apply_firewall "$(current_ssh_cidr)"
 
 if [[ "$ENABLE_AUTO_SNAPSHOT" == "true" ]]; then
-  info "自動スナップショットを有効にします（毎日 ${AUTO_SNAPSHOT_TIME_UTC} UTC）"
-  aws_ls enable-add-on --resource-name "$LIGHTSAIL_INSTANCE_NAME" \
-    --add-on-request "addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=${AUTO_SNAPSHOT_TIME_UTC}}" >/dev/null
+  # 既に同じ時刻で有効なら何もしない（同じ内容で EnableAddOn を呼ぶと
+  # "The addOn is already in requested state" で失敗するため）
+  read -r snapshot_status snapshot_time < <(
+    aws_ls get-instance --instance-name "$LIGHTSAIL_INSTANCE_NAME" \
+      --query "instance.addOns[?name=='AutoSnapshot'] | [0].[status,snapshotTimeOfDay]" --output text 2>/dev/null || true
+  )
+  if [[ "${snapshot_status,,}" =~ ^(enabled|enabling)$ && "$snapshot_time" == "$AUTO_SNAPSHOT_TIME_UTC" ]]; then
+    info "自動スナップショットは有効です（毎日 ${AUTO_SNAPSHOT_TIME_UTC} UTC）"
+  else
+    info "自動スナップショットを有効にします（毎日 ${AUTO_SNAPSHOT_TIME_UTC} UTC）"
+    if ! addon_error="$(aws_ls enable-add-on --resource-name "$LIGHTSAIL_INSTANCE_NAME" \
+      --add-on-request "addOnType=AutoSnapshot,autoSnapshotAddOnRequest={snapshotTimeOfDay=${AUTO_SNAPSHOT_TIME_UTC}}" 2>&1 >/dev/null)"; then
+      [[ "$addon_error" == *"already in requested state"* ]] || die "自動スナップショットを有効にできません: ${addon_error}"
+      info "自動スナップショットは既に有効です"
+    fi
+  fi
 fi
 
 # --- 初期設定（cloud-init.sh）の完了を待つ -------------------------------------
