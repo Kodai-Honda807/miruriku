@@ -1,5 +1,5 @@
 # みる陸 CI
-# - シークレット不要（DB は各ジョブの service コンテナ、イメージはビルドのみで push しない）
+# - シークレット不要（DB は各ジョブの service コンテナ。デプロイは手元から deploy/static/deploy.sh で行う）
 # - Node.js は .nvmrc、pnpm は package.json の packageManager に従う
 name: CI
 
@@ -74,7 +74,7 @@ jobs:
       - run: pnpm test:db
 
   build:
-    name: Build (without database)
+    name: Static build (without database)
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -90,14 +90,20 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'next.config.ts') }}
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('src/**', 'public/**', 'data/**', 'next.config.ts') }}
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-      # DATABASE_URL を設定せずにビルドできること（ビルド時に DB へ接続しない）を確認する
+      # DATABASE_URL を設定せずに静的書き出しできること（公開データは data/real-events.ts）と、
+      # 公開物に管理画面が含まれないことを確認する
       - name: pnpm build
+        env:
+          MIRURIKU_SITE_URL: https://miruriku.com
         run: |
           if [ -n "${DATABASE_URL:-}" ]; then echo "DATABASE_URL must not be set during build" >&2; exit 1; fi
           pnpm build
+          test -f out/index.html && test -f out/404.html
+          if [ -e out/admin ] || [ -e out/api ]; then echo "admin pages must not be exported" >&2; exit 1; fi
+          grep -q '<loc>https://miruriku.com/events/' out/sitemap.xml
 
   e2e:
     name: E2E (Playwright)
@@ -143,33 +149,3 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  docker:
-    name: Docker image (${{ matrix.target }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [runner, migrate, collector]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: docker/setup-buildx-action@v4
-      # ビルドのみ（レジストリへの push はしない）
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: ${{ matrix.target }}
-          push: false
-          load: true
-          tags: miruriku-${{ matrix.target }}:ci
-          cache-from: type=gha,scope=${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.target }}
-      - name: Image runs as a non-root user
-        run: |
-          uid="$(docker run --rm --entrypoint id miruriku-${{ matrix.target }}:ci -u)"
-          echo "uid=${uid}"
-          test "${uid}" != "0"
-      - name: Image size
-        run: docker image ls miruriku-${{ matrix.target }}:ci

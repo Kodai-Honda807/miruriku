@@ -28,7 +28,7 @@ export default function CandidatesPage({ searchParams }: AdminPageProps) {
     <div className="grid gap-6">
       <h1 className="text-2xl font-semibold">収集候補</h1>
       <p className="text-sm text-muted-foreground">
-        収集 CLI が情報源から抽出した候補です。人が内容を確認して承認するまで、公開データには反映されません。
+        収集 CLI が情報源から抽出した候補です。人が内容を確認して承認するまで、DB には反映されません（公開サイトは data/real-events.ts から作るため、承認しても変わりません）。
       </p>
       <Suspense fallback={<Skeleton className="h-64" />}>
         <CandidateList searchParams={searchParams} />

@@ -4,7 +4,8 @@
  * テスト用に時刻を固定できる:
  * - MIRURIKU_FIXED_NOW（ISO 8601）: 開発サーバー（NODE_ENV が production 以外）のサーバー側だけで有効
  * - NEXT_PUBLIC_MIRURIKU_FIXED_NOW: ビルド時にブラウザ用のコードへ埋め込まれ、ビルド時の描画とブラウザの両方で有効。
- *   E2E の静的ビルド専用。本番のデプロイスクリプト（deploy/static/deploy.sh）は、これを設定したビルドを拒否する
+ *   E2E の静的ビルド専用。本番のデプロイスクリプト（deploy/static/deploy.sh）は手元の環境変数を引き継がずにビルドするため、
+ *   本番に入ることはない
  *
  * NEXT_PUBLIC_ の値をブラウザ用のコードに埋め込ませるため、process.env.NEXT_PUBLIC_... を直接参照する。
  */
